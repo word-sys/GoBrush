@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gobrush"
+version = "0.1.0"
+description = "A modern, lightweight quick image annotator"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "PyGObject>=3.42.0",
+    "pycairo>=1.20.0",
+    "Pillow>=9.0.0",
+]
+
+[project.scripts]
+gobrush = "gobrush.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gobrush*"]
