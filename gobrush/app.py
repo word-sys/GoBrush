@@ -7,6 +7,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Gtk, Adw, Gio, GLib
 
 from gobrush import __version__, __app_id__
+from gobrush.ui.window import MainWindow
 
 
 class GoBrushApp(Adw.Application):
@@ -35,16 +36,5 @@ class GoBrushApp(Adw.Application):
     def do_activate(self) -> None:
         win = self.props.active_window
         if not win:
-            win = Adw.ApplicationWindow(application=self, title="GoBrush")
-            win.set_default_size(800, 600)
-            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            header = Adw.HeaderBar()
-            box.append(header)
-            status = Adw.StatusPage(
-                title="GoBrush",
-                description="Modern Lightweight Quick Annotator",
-                icon_name="applications-graphics-symbolic",
-            )
-            box.append(status)
-            win.set_content(box)
+            win = MainWindow(application=self)
         win.present()
