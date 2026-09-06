@@ -14,6 +14,11 @@ dependencies = [
     "Pillow>=9.0.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/word-sys/GoBrush"
+Repository = "https://github.com/word-sys/GoBrush"
+Issues = "https://github.com/word-sys/GoBrush/issues"
+
 [project.scripts]
 gobrush = "gobrush.__main__:main"
 
