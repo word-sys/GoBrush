@@ -6,6 +6,8 @@ gi.require_version("Adw", "1")
 from gi.repository import Gtk, Adw, Gio, GLib
 
 from gobrush import __version__
+from gobrush.compat.dialogs import open_file_dialog
+from gobrush.ui.empty_state import EmptyStateView
 
 
 class MainWindow(Adw.ApplicationWindow):
@@ -32,11 +34,18 @@ class MainWindow(Adw.ApplicationWindow):
         self._build_header_actions()
         self._build_menu()
 
+        self.empty_state = EmptyStateView(
+            on_open=self._on_open_action,
+            on_paste=self._on_paste_action,
+        )
+        self.show_empty_state()
+
     def _build_header_actions(self) -> None:
         self.btn_open = Gtk.Button(
             icon_name="document-open-symbolic",
             tooltip_text="Open Image (Ctrl+O)",
         )
+        self.btn_open.connect("clicked", lambda _: self._on_open_action())
         self.header_bar.pack_start(self.btn_open)
 
         self.btn_undo = Gtk.Button(
@@ -106,3 +115,24 @@ class MainWindow(Adw.ApplicationWindow):
         toast.set_timeout(timeout)
         self.toast_overlay.add_toast(toast)
         return toast
+
+    def show_empty_state(self) -> None:
+        self.content_bin.set_child(self.empty_state)
+        self.set_has_image(False)
+
+    def show_content(self, widget: Gtk.Widget) -> None:
+        self.content_bin.set_child(widget)
+        self.set_has_image(True)
+
+    def is_empty(self) -> bool:
+        return self.content_bin.get_child() == self.empty_state
+
+    def _on_open_action(self) -> None:
+        open_file_dialog(self, self._on_file_selected)
+
+    def _on_file_selected(self, path: str | None) -> None:
+        if path:
+            self.show_toast(f"Opened: {path}")
+
+    def _on_paste_action(self) -> None:
+        self.show_toast("Clipboard paste ready")
