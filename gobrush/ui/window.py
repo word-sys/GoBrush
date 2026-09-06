@@ -21,6 +21,14 @@ class MainWindow(Adw.ApplicationWindow):
         self.header_bar = Adw.HeaderBar()
         self._main_box.append(self.header_bar)
 
+        self.toast_overlay = Adw.ToastOverlay()
+        self.toast_overlay.set_vexpand(True)
+        self.toast_overlay.set_hexpand(True)
+        self._main_box.append(self.toast_overlay)
+
+        self.content_bin = Adw.Bin()
+        self.toast_overlay.set_child(self.content_bin)
+
         self._build_header_actions()
         self._build_menu()
 
@@ -82,3 +90,19 @@ class MainWindow(Adw.ApplicationWindow):
 
     def set_redo_sensitive(self, sensitive: bool) -> None:
         self.btn_redo.set_sensitive(sensitive)
+
+    def show_toast(self, title: str, timeout: int = 2) -> Adw.Toast:
+        toast = Adw.Toast.new(title)
+        toast.set_timeout(timeout)
+        self.toast_overlay.add_toast(toast)
+        return toast
+
+    def show_toast_with_action(
+        self, title: str, button_label: str, action_name: str, timeout: int = 5
+    ) -> Adw.Toast:
+        toast = Adw.Toast.new(title)
+        toast.set_button_label(button_label)
+        toast.set_action_name(action_name)
+        toast.set_timeout(timeout)
+        self.toast_overlay.add_toast(toast)
+        return toast

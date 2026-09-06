@@ -40,6 +40,22 @@ class TestWindow(unittest.TestCase):
         self.assertTrue(win.btn_copy.get_sensitive())
         self.assertTrue(win.btn_save.get_sensitive())
 
+    def test_toast_overlay(self) -> None:
+        win = MainWindow()
+        self.assertIsInstance(win.toast_overlay, Adw.ToastOverlay)
+        self.assertIsInstance(win.content_bin, Adw.Bin)
+
+        t1 = win.show_toast("Copied to clipboard", timeout=2)
+        self.assertIsInstance(t1, Adw.Toast)
+        self.assertEqual(t1.get_title(), "Copied to clipboard")
+        self.assertEqual(t1.get_timeout(), 2)
+
+        t2 = win.show_toast_with_action("Saved", "Open", "app.open-saved", timeout=4)
+        self.assertIsInstance(t2, Adw.Toast)
+        self.assertEqual(t2.get_title(), "Saved")
+        self.assertEqual(t2.get_button_label(), "Open")
+        self.assertEqual(t2.get_action_name(), "app.open-saved")
+
 
 if __name__ == "__main__":
     unittest.main()
