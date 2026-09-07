@@ -4,7 +4,7 @@ import cairo
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk
+from gi.repository import Gtk, Gdk
 
 from gobrush.core.transform import ViewportTransform
 from gobrush.core.checkerboard import create_checkerboard_pattern
@@ -36,8 +36,22 @@ class Canvas(Gtk.DrawingArea):
 
         self._view_changed_callbacks: list[Callable[[], None]] = []
 
+        # Cursor tracking and event controllers
+        self._cursor_pos: tuple[float, float] | None = None
+        self._motion_controller = Gtk.EventControllerMotion()
+        self._motion_controller.connect("motion", self._on_motion_internal)
+        self._motion_controller.connect("leave", self._on_leave_internal)
+        self.add_controller(self._motion_controller)
+
+        self._scroll_controller = Gtk.EventControllerScroll.new(
+            Gtk.EventControllerScrollFlags.BOTH_AXES
+        )
+        self._scroll_controller.connect("scroll", self._on_scroll)
+        self.add_controller(self._scroll_controller)
+
         self.connect("notify::scale-factor", self._on_scale_factor_changed)
         self.set_draw_func(self._on_draw)
+
 
 
     @property
@@ -279,3 +293,31 @@ class Canvas(Gtk.DrawingArea):
             cr.save()
             hook(cr, width, height)
             cr.restore()
+
+    @property
+    def cursor_pos(self) -> tuple[float, float] | None:
+        return self._cursor_pos
+
+    def _on_motion_internal(
+        self, controller: Gtk.EventControllerMotion, x: float, y: float
+    ) -> None:
+        self._cursor_pos = (x, y)
+
+    def _on_leave_internal(self, controller: Gtk.EventControllerMotion) -> None:
+        self._cursor_pos = None
+
+    def _on_scroll(
+        self, controller: Gtk.EventControllerScroll, dx: float, dy: float
+    ) -> bool:
+        state = controller.get_current_event_state()
+        is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
+
+        if is_ctrl:
+            pivot = self._cursor_pos or (self.viewport_width / 2.0, self.viewport_height / 2.0)
+            factor = 1.15 ** (-dy)
+            self.zoom_by(factor, pivot=pivot)
+            return True
+        else:
+            self.pan_by(-dx * 20.0, -dy * 20.0)
+            return True
+
