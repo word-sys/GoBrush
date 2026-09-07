@@ -34,8 +34,11 @@ class Canvas(Gtk.DrawingArea):
         self._checkerboard_pattern: cairo.SurfacePattern | None = None
         self._cached_scale_factor: int = 1
 
+        self._view_changed_callbacks: list[Callable[[], None]] = []
+
         self.connect("notify::scale-factor", self._on_scale_factor_changed)
         self.set_draw_func(self._on_draw)
+
 
     @property
     def background_color(self) -> tuple[float, float, float, float]:
@@ -100,21 +103,37 @@ class Canvas(Gtk.DrawingArea):
     def pan_y(self) -> float:
         return self.transform.pan_y
 
+    def add_view_changed_callback(self, cb: Callable[[], None]) -> None:
+        if cb not in self._view_changed_callbacks:
+            self._view_changed_callbacks.append(cb)
+
+    def remove_view_changed_callback(self, cb: Callable[[], None]) -> None:
+        if cb in self._view_changed_callbacks:
+            self._view_changed_callbacks.remove(cb)
+
+    def _notify_view_changed(self) -> None:
+        for cb in self._view_changed_callbacks:
+            cb()
+
     def set_zoom(self, zoom: float, pivot: tuple[float, float] | None = None) -> None:
         self.transform.set_zoom(zoom, pivot)
         self.queue_draw()
+        self._notify_view_changed()
 
     def zoom_by(self, factor: float, pivot: tuple[float, float] | None = None) -> None:
         self.transform.zoom_by(factor, pivot)
         self.queue_draw()
+        self._notify_view_changed()
 
     def set_pan(self, pan_x: float, pan_y: float) -> None:
         self.transform.set_pan(pan_x, pan_y)
         self.queue_draw()
+        self._notify_view_changed()
 
     def pan_by(self, dx: float, dy: float) -> None:
         self.transform.pan_by(dx, dy)
         self.queue_draw()
+        self._notify_view_changed()
 
     def screen_to_image(self, sx: float, sy: float) -> tuple[float, float]:
         return self.transform.screen_to_image(sx, sy)
@@ -135,6 +154,7 @@ class Canvas(Gtk.DrawingArea):
             vw, vh, self._image_width, self._image_height, padding=padding, upscale=upscale
         )
         self.queue_draw()
+        self._notify_view_changed()
 
     def center_image(
         self,
@@ -145,12 +165,14 @@ class Canvas(Gtk.DrawingArea):
         vh = viewport_height if viewport_height is not None else self.viewport_height
         self.transform.center_image(vw, vh, self._image_width, self._image_height)
         self.queue_draw()
+        self._notify_view_changed()
 
     def reset_view(self) -> None:
         self.transform.reset(
             self.viewport_width, self.viewport_height, self._image_width, self._image_height
         )
         self.queue_draw()
+        self._notify_view_changed()
 
     def set_image_surface(
         self,
@@ -167,6 +189,7 @@ class Canvas(Gtk.DrawingArea):
             self._image_height = 0
             self.transform.reset()
         self.queue_draw()
+        self._notify_view_changed()
 
     def clear(self) -> None:
         self.set_image_surface(None)

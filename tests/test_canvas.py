@@ -13,8 +13,10 @@ from gobrush.ui.window import MainWindow
 
 
 class TestCanvas(unittest.TestCase):
-    def setUp(self) -> None:
-        self.app = Adw.Application(application_id="io.github.word_sys.GoBrush.TestCanvas")
+    @classmethod
+    def setUpClass(cls) -> None:
+        Gtk.init()
+
 
     def test_canvas_init(self) -> None:
         canvas = Canvas()
@@ -81,13 +83,14 @@ class TestCanvas(unittest.TestCase):
         mock_hook.assert_not_called()
 
     def test_window_canvas_integration(self) -> None:
-        win = MainWindow(application=self.app)
+        win = MainWindow()
         self.assertIsInstance(win.canvas, Canvas)
         self.assertTrue(win.is_empty())
 
         win.show_canvas()
         self.assertFalse(win.is_empty())
-        self.assertIs(win.content_bin.get_child(), win.canvas)
+        self.assertIs(win.content_bin.get_child(), win.canvas_view)
+        self.assertIs(win.canvas_view.canvas, win.canvas)
         self.assertTrue(win.btn_copy.get_sensitive())
         self.assertTrue(win.btn_save.get_sensitive())
 
