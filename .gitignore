@@ -22,7 +22,7 @@ venv/
 .venv/
 env/
 ENV/
-tests/
+# tests/
 .vscode/
 .idea/
 *.swp
