@@ -51,25 +51,36 @@ def open_file_dialog(
     callback: Callable[[str | None], None],
     title: str = "Open Image",
     show: bool = True,
-) -> Gtk.FileChooserNative:
-    dialog = Gtk.FileChooserNative.new(
-        title, parent, Gtk.FileChooserAction.OPEN, "_Open", "_Cancel"
+) -> Gtk.FileChooserDialog:
+    dialog = Gtk.FileChooserDialog(
+        title=title,
+        transient_for=parent,
+        action=Gtk.FileChooserAction.OPEN,
     )
+    dialog.add_buttons(
+        "_Cancel", Gtk.ResponseType.CANCEL,
+        "_Open", Gtk.ResponseType.ACCEPT,
+    )
+    dialog.set_modal(True)
     for f in _build_image_filters():
         dialog.add_filter(f)
 
-    def _on_response(native: Gtk.FileChooserNative, response: int) -> None:
+    def _on_response(dlg: Gtk.FileChooserDialog, response: int) -> None:
         path: str | None = None
         if response == Gtk.ResponseType.ACCEPT:
-            gfile = native.get_file()
+            gfile = dlg.get_file()
             if gfile:
                 path = gfile.get_path()
-        native.destroy()
+        dlg.destroy()
+        if parent is not None and getattr(parent, "_active_file_dialog", None) is dlg:
+            parent._active_file_dialog = None
         callback(path)
 
     dialog.connect("response", _on_response)
+    if parent is not None:
+        parent._active_file_dialog = dialog
     if show:
-        dialog.show()
+        dialog.present()
     return dialog
 
 
@@ -79,24 +90,35 @@ def save_file_dialog(
     default_name: str = "Screenshot.png",
     title: str = "Save Image",
     show: bool = True,
-) -> Gtk.FileChooserNative:
-    dialog = Gtk.FileChooserNative.new(
-        title, parent, Gtk.FileChooserAction.SAVE, "_Save", "_Cancel"
+) -> Gtk.FileChooserDialog:
+    dialog = Gtk.FileChooserDialog(
+        title=title,
+        transient_for=parent,
+        action=Gtk.FileChooserAction.SAVE,
     )
+    dialog.add_buttons(
+        "_Cancel", Gtk.ResponseType.CANCEL,
+        "_Save", Gtk.ResponseType.ACCEPT,
+    )
+    dialog.set_modal(True)
     dialog.set_current_name(default_name)
     for f in _build_image_filters():
         dialog.add_filter(f)
 
-    def _on_response(native: Gtk.FileChooserNative, response: int) -> None:
+    def _on_response(dlg: Gtk.FileChooserDialog, response: int) -> None:
         path: str | None = None
         if response == Gtk.ResponseType.ACCEPT:
-            gfile = native.get_file()
+            gfile = dlg.get_file()
             if gfile:
                 path = gfile.get_path()
-        native.destroy()
+        dlg.destroy()
+        if parent is not None and getattr(parent, "_active_file_dialog", None) is dlg:
+            parent._active_file_dialog = None
         callback(path)
 
     dialog.connect("response", _on_response)
+    if parent is not None:
+        parent._active_file_dialog = dialog
     if show:
-        dialog.show()
+        dialog.present()
     return dialog
