@@ -7,6 +7,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk
 
 from gobrush.core.transform import ViewportTransform
+from gobrush.core.checkerboard import create_checkerboard_pattern
 
 
 class Canvas(Gtk.DrawingArea):
@@ -27,6 +28,13 @@ class Canvas(Gtk.DrawingArea):
         self._image_draw_hooks: list[Callable[[cairo.Context], None]] = []
         self._draw_hooks: list[Callable[[cairo.Context, int, int], None]] = []
 
+        # Transparency checkerboard & HiDPI support
+        self._show_checkerboard: bool = True
+        self._checkerboard_tile_size: int = 10
+        self._checkerboard_pattern: cairo.SurfacePattern | None = None
+        self._cached_scale_factor: int = 1
+
+        self.connect("notify::scale-factor", self._on_scale_factor_changed)
         self.set_draw_func(self._on_draw)
 
     @property
@@ -37,6 +45,20 @@ class Canvas(Gtk.DrawingArea):
     def background_color(self, color: tuple[float, float, float, float]) -> None:
         self._background_color = color
         self.queue_draw()
+
+    @property
+    def show_checkerboard(self) -> bool:
+        return self._show_checkerboard
+
+    @show_checkerboard.setter
+    def show_checkerboard(self, show: bool) -> None:
+        self._show_checkerboard = show
+        self.queue_draw()
+
+    @property
+    def scale_factor(self) -> int:
+        factor = self.get_scale_factor()
+        return max(1, factor)
 
     @property
     def image_surface(self) -> cairo.ImageSurface | None:
@@ -169,6 +191,20 @@ class Canvas(Gtk.DrawingArea):
             self._draw_hooks.remove(hook)
             self.queue_draw()
 
+    def _on_scale_factor_changed(self, *_) -> None:
+        self._checkerboard_pattern = None
+        self.queue_draw()
+
+    def _get_checkerboard_pattern(self) -> cairo.SurfacePattern:
+        scale = self.scale_factor
+        if self._checkerboard_pattern is None or self._cached_scale_factor != scale:
+            self._checkerboard_pattern = create_checkerboard_pattern(
+                tile_size=self._checkerboard_tile_size,
+                scale_factor=scale,
+            )
+            self._cached_scale_factor = scale
+        return self._checkerboard_pattern
+
     def _on_draw(
         self, area: Gtk.DrawingArea, cr: cairo.Context, width: int, height: int
     ) -> None:
@@ -185,8 +221,30 @@ class Canvas(Gtk.DrawingArea):
         cr.save()
         self.transform.apply_to_cairo(cr)
         if self._image_surface is not None:
+            # Render checkerboard behind transparent image pixels
+            if self._show_checkerboard:
+                cr.save()
+                pattern = self._get_checkerboard_pattern()
+                pat_matrix = cairo.Matrix()
+                pat_matrix.scale(self.zoom, self.zoom)
+                pattern.set_matrix(pat_matrix)
+                cr.set_source(pattern)
+                cr.rectangle(0, 0, self._image_width, self._image_height)
+                cr.fill()
+                cr.restore()
+
+            # Render image surface
             cr.set_source_surface(self._image_surface, 0, 0)
             cr.paint()
+
+            # Draw subtle image boundary outline
+            cr.save()
+            cr.set_line_width(1.0 / self.zoom)
+            cr.set_source_rgba(0.0, 0.0, 0.0, 0.25)
+            cr.rectangle(0, 0, self._image_width, self._image_height)
+            cr.stroke()
+            cr.restore()
+
         for hook in self._image_draw_hooks:
             cr.save()
             hook(cr)
