@@ -8,6 +8,7 @@ from gi.repository import Gtk, Adw, Gio, GLib
 from gobrush import __version__
 from gobrush.compat.dialogs import open_file_dialog
 from gobrush.ui.empty_state import EmptyStateView
+from gobrush.ui.canvas import Canvas
 
 
 class MainWindow(Adw.ApplicationWindow):
@@ -34,6 +35,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._build_header_actions()
         self._build_menu()
 
+        self.canvas = Canvas()
         self.empty_state = EmptyStateView(
             on_open=self._on_open_action,
             on_paste=self._on_paste_action,
@@ -119,6 +121,9 @@ class MainWindow(Adw.ApplicationWindow):
     def show_empty_state(self) -> None:
         self.content_bin.set_child(self.empty_state)
         self.set_has_image(False)
+
+    def show_canvas(self) -> None:
+        self.show_content(self.canvas)
 
     def show_content(self, widget: Gtk.Widget) -> None:
         self.content_bin.set_child(widget)
