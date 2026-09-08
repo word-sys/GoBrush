@@ -25,9 +25,9 @@ class TestWindow(unittest.TestCase):
         self.assertIsNotNone(win.btn_save)
         self.assertEqual(win.btn_open.get_label(), "Open")
         self.assertEqual(win.btn_save.get_label(), "Save")
-        self.assertEqual(win.btn_undo.get_label(), "Undo")
-        self.assertEqual(win.btn_redo.get_label(), "Redo")
-        self.assertEqual(win.btn_copy.get_label(), "Copy")
+        self.assertEqual(win.btn_undo.get_icon_name(), "edit-undo-symbolic")
+        self.assertEqual(win.btn_redo.get_icon_name(), "edit-redo-symbolic")
+        self.assertEqual(win.btn_copy.get_icon_name(), "edit-copy-symbolic")
 
     def test_button_sensitivities(self) -> None:
         win = MainWindow()

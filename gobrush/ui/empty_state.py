@@ -17,29 +17,47 @@ class EmptyStateView(Adw.Bin):
         self.on_open = on_open
         self.on_paste = on_paste
 
+        root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+
         self.status_page = Adw.StatusPage(
             title="GoBrush",
-            description="Paste an image from clipboard, drag and drop, or open a file",
+            description="Simple, fast, and lightweight image annotator",
             icon_name="image-x-generic-symbolic",
         )
+        self.status_page.set_vexpand(True)
+        self.status_page.set_hexpand(True)
 
-        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         btn_box.set_halign(Gtk.Align.CENTER)
 
-        self.btn_open = Gtk.Button(label="Open Image")
-        self.btn_open.set_icon_name("document-open-symbolic")
+        self.btn_open = Gtk.Button(label="Open File...")
         self.btn_open.add_css_class("suggested-action")
-        self.btn_open.add_css_class("pill")
+        self.btn_open.set_size_request(165, 32)
         if on_open:
             self.btn_open.connect("clicked", lambda _: on_open())
         btn_box.append(self.btn_open)
 
         self.btn_paste = Gtk.Button(label="Paste from Clipboard")
-        self.btn_paste.set_icon_name("edit-paste-symbolic")
-        self.btn_paste.add_css_class("pill")
+        self.btn_paste.set_size_request(165, 32)
         if on_paste:
             self.btn_paste.connect("clicked", lambda _: on_paste())
         btn_box.append(self.btn_paste)
 
+        tip_label = Gtk.Label(label="Tip: Use Ctrl+V to quickly paste a screenshot from the clipboard.")
+        tip_label.add_css_class("dim-label")
+        tip_label.set_margin_top(20)
+        btn_box.append(tip_label)
+
         self.status_page.set_child(btn_box)
-        self.set_child(self.status_page)
+        root_box.append(self.status_page)
+
+        bottom_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        bottom_bar.set_margin_start(16)
+        bottom_bar.set_margin_bottom(8)
+
+        bottom_label = Gtk.Label(label="Open a file or drag and drop one here.")
+        bottom_label.add_css_class("dim-label")
+        bottom_bar.append(bottom_label)
+        root_box.append(bottom_bar)
+
+        self.set_child(root_box)

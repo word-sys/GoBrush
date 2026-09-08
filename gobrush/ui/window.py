@@ -33,8 +33,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.content_bin = Adw.Bin()
         self.toast_overlay.set_child(self.content_bin)
 
-        self._build_header_actions()
         self._build_menu()
+        self._build_header_actions()
 
         self.canvas_view = CanvasView()
         self.canvas = self.canvas_view.canvas
@@ -68,21 +68,21 @@ class MainWindow(Adw.ApplicationWindow):
         self.header_bar.pack_start(self.btn_save)
 
         self.btn_undo = Gtk.Button(
-            label="Undo",
+            icon_name="edit-undo-symbolic",
             tooltip_text="Undo (Ctrl+Z)",
             sensitive=False,
         )
         self.header_bar.pack_start(self.btn_undo)
 
         self.btn_redo = Gtk.Button(
-            label="Redo",
+            icon_name="edit-redo-symbolic",
             tooltip_text="Redo (Ctrl+Shift+Z / Ctrl+Y)",
             sensitive=False,
         )
         self.header_bar.pack_start(self.btn_redo)
 
         self.btn_copy = Gtk.Button(
-            label="Copy",
+            icon_name="edit-copy-symbolic",
             tooltip_text="Copy to Clipboard (Ctrl+C)",
             sensitive=False,
         )

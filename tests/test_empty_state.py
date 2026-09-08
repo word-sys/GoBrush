@@ -30,6 +30,8 @@ class TestEmptyState(unittest.TestCase):
         view = EmptyStateView(on_open=on_o, on_paste=on_p)
         self.assertIsInstance(view.status_page, Adw.StatusPage)
         self.assertEqual(view.status_page.get_title(), "GoBrush")
+        self.assertEqual(view.btn_open.get_label(), "Open File...")
+        self.assertEqual(view.btn_paste.get_label(), "Paste from Clipboard")
 
         view.btn_open.emit("clicked")
         self.assertTrue(opened)
