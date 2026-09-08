@@ -12,12 +12,10 @@ class EmptyStateView(Adw.Bin):
         self,
         on_open: Callable[[], None] | None = None,
         on_paste: Callable[[], None] | None = None,
-        on_guide: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self.on_open = on_open
         self.on_paste = on_paste
-        self.on_guide = on_guide
 
         root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
@@ -35,29 +33,17 @@ class EmptyStateView(Adw.Bin):
         self.btn_open = Gtk.Button(label="Open File...")
         self.btn_open.add_css_class("suggested-action")
         self.btn_open.add_css_class("pill")
-        self.btn_open.set_size_request(220, 38)
+        self.btn_open.set_size_request(200, 40)
         if on_open:
             self.btn_open.connect("clicked", lambda _: on_open())
         btn_box.append(self.btn_open)
 
         self.btn_paste = Gtk.Button(label="Paste from Clipboard")
         self.btn_paste.add_css_class("pill")
-        self.btn_paste.set_size_request(220, 38)
+        self.btn_paste.set_size_request(200, 40)
         if on_paste:
             self.btn_paste.connect("clicked", lambda _: on_paste())
         btn_box.append(self.btn_paste)
-
-        self.btn_guide = Gtk.Button(label="Quick Start Guide")
-        self.btn_guide.add_css_class("pill")
-        self.btn_guide.set_size_request(220, 38)
-        if on_guide:
-            self.btn_guide.connect("clicked", lambda _: on_guide())
-        btn_box.append(self.btn_guide)
-
-        tip_label = Gtk.Label(label="Tip: Use Ctrl+V to quickly paste a screenshot from the clipboard.")
-        tip_label.add_css_class("dim-label")
-        tip_label.set_margin_top(24)
-        btn_box.append(tip_label)
 
         self.status_page.set_child(btn_box)
         root_box.append(self.status_page)
