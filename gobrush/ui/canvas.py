@@ -33,6 +33,7 @@ class Canvas(Gtk.DrawingArea):
         self._checkerboard_tile_size: int = 10
         self._checkerboard_pattern: cairo.SurfacePattern | None = None
         self._cached_scale_factor: int = 1
+        self._image_has_alpha: bool = True
 
         self._view_changed_callbacks: list[Callable[[], None]] = []
         self._anim_tick_id: int | None = None
