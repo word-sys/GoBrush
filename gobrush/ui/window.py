@@ -53,40 +53,40 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _build_header_actions(self) -> None:
         self.btn_open = Gtk.Button(
-            icon_name="document-open-symbolic",
+            label="Open",
             tooltip_text="Open Image (Ctrl+O)",
         )
         self.btn_open.connect("clicked", lambda _: self._on_open_action())
         self.header_bar.pack_start(self.btn_open)
 
+        self.btn_save = Gtk.Button(
+            label="Save",
+            tooltip_text="Save Image (Ctrl+S)",
+            sensitive=False,
+        )
+        self.btn_save.add_css_class("suggested-action")
+        self.header_bar.pack_start(self.btn_save)
+
         self.btn_undo = Gtk.Button(
-            icon_name="edit-undo-symbolic",
+            label="Undo",
             tooltip_text="Undo (Ctrl+Z)",
             sensitive=False,
         )
         self.header_bar.pack_start(self.btn_undo)
 
         self.btn_redo = Gtk.Button(
-            icon_name="edit-redo-symbolic",
+            label="Redo",
             tooltip_text="Redo (Ctrl+Shift+Z / Ctrl+Y)",
             sensitive=False,
         )
         self.header_bar.pack_start(self.btn_redo)
 
         self.btn_copy = Gtk.Button(
-            icon_name="edit-copy-symbolic",
+            label="Copy",
             tooltip_text="Copy to Clipboard (Ctrl+C)",
             sensitive=False,
         )
-        self.btn_copy.add_css_class("suggested-action")
         self.header_bar.pack_end(self.btn_copy)
-
-        self.btn_save = Gtk.Button(
-            icon_name="document-save-symbolic",
-            tooltip_text="Save Image (Ctrl+S)",
-            sensitive=False,
-        )
-        self.header_bar.pack_end(self.btn_save)
 
     def _build_menu(self) -> None:
         menu = Gio.Menu()
