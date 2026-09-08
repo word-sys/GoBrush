@@ -3,7 +3,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, Gio, GLib
+from gi.repository import Gtk, Gdk, Adw, Gio, GLib
 
 from gobrush import __version__
 from gobrush.compat.dialogs import open_file_dialog
@@ -44,6 +44,11 @@ class MainWindow(Adw.ApplicationWindow):
             on_paste=self._on_paste_action,
         )
         self.show_empty_state()
+
+        self._key_controller = Gtk.EventControllerKey()
+        self._key_controller.set_propagation_phase(Gtk.PropagationPhase.BUBBLE)
+        self._key_controller.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(self._key_controller)
 
     def _build_header_actions(self) -> None:
         self.btn_open = Gtk.Button(
@@ -144,3 +149,10 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_paste_action(self) -> None:
         self.show_toast("Clipboard paste ready")
+
+    def _on_key_pressed(
+        self, controller: Gtk.EventControllerKey, keyval: int, keycode: int, state: Gdk.ModifierType
+    ) -> bool:
+        if not self.is_empty():
+            return self.canvas.handle_keyboard_zoom(keyval, state)
+        return False

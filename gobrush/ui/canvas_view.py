@@ -52,3 +52,15 @@ class CanvasView(Gtk.Overlay):
     def _sync_status(self) -> None:
         self.status_bar.set_zoom(self.canvas.zoom)
         self.status_bar.set_dimensions(self.canvas.image_width, self.canvas.image_height)
+
+    def zoom_in(self) -> None:
+        self.canvas.zoom_in()
+
+    def zoom_out(self) -> None:
+        self.canvas.zoom_out()
+
+    def zoom_fit(self, upscale: bool = False, animate: bool = True) -> None:
+        self.canvas.zoom_fit(upscale=upscale, animate=animate)
+
+    def zoom_actual_size(self, animate: bool = True) -> None:
+        self.canvas.zoom_actual_size(animate=animate)
