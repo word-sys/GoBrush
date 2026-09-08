@@ -48,6 +48,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._key_controller = Gtk.EventControllerKey()
         self._key_controller.set_propagation_phase(Gtk.PropagationPhase.BUBBLE)
         self._key_controller.connect("key-pressed", self._on_key_pressed)
+        self._key_controller.connect("key-released", self._on_key_released)
         self.add_controller(self._key_controller)
 
     def _build_header_actions(self) -> None:
@@ -154,5 +155,11 @@ class MainWindow(Adw.ApplicationWindow):
         self, controller: Gtk.EventControllerKey, keyval: int, keycode: int, state: Gdk.ModifierType
     ) -> bool:
         if not self.is_empty():
-            return self.canvas.handle_keyboard_zoom(keyval, state)
+            return self.canvas.handle_key_pressed(keyval, state)
         return False
+
+    def _on_key_released(
+        self, controller: Gtk.EventControllerKey, keyval: int, keycode: int, state: Gdk.ModifierType
+    ) -> None:
+        if not self.is_empty():
+            self.canvas.handle_key_released(keyval, state)

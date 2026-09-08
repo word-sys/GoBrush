@@ -37,6 +37,13 @@ class Canvas(Gtk.DrawingArea):
         self._view_changed_callbacks: list[Callable[[], None]] = []
         self._anim_tick_id: int | None = None
 
+        # Drag panning state
+        self._is_panning: bool = False
+        self._is_space_panning: bool = False
+        self._space_pressed: bool = False
+        self._drag_start_pan: tuple[float, float] = (0.0, 0.0)
+        self._tool_cursor_name: str | None = None
+
         # Cursor tracking and event controllers
         self._cursor_pos: tuple[float, float] | None = None
         self._motion_controller = Gtk.EventControllerMotion()
@@ -50,9 +57,32 @@ class Canvas(Gtk.DrawingArea):
         self._scroll_controller.connect("scroll", self._on_scroll)
         self.add_controller(self._scroll_controller)
 
+        # Middle-click drag panning
+        self._middle_drag = Gtk.GestureDrag()
+        self._middle_drag.set_button(Gdk.BUTTON_MIDDLE)
+        self._middle_drag.connect("drag-begin", self._on_middle_drag_begin)
+        self._middle_drag.connect("drag-update", self._on_middle_drag_update)
+        self._middle_drag.connect("drag-end", self._on_middle_drag_end)
+        self._middle_drag.connect("cancel", self._on_middle_drag_cancel)
+        self.add_controller(self._middle_drag)
+
+        # Primary (left-click) drag: spacebar pan or tool interactions
+        self._primary_drag = Gtk.GestureDrag()
+        self._primary_drag.set_button(Gdk.BUTTON_PRIMARY)
+        self._primary_drag.connect("drag-begin", self._on_primary_drag_begin)
+        self._primary_drag.connect("drag-update", self._on_primary_drag_update)
+        self._primary_drag.connect("drag-end", self._on_primary_drag_end)
+        self._primary_drag.connect("cancel", self._on_primary_drag_cancel)
+        self.add_controller(self._primary_drag)
+
         self._key_controller = Gtk.EventControllerKey()
         self._key_controller.connect("key-pressed", self._on_key_pressed)
+        self._key_controller.connect("key-released", self._on_key_released)
         self.add_controller(self._key_controller)
+
+        self._focus_controller = Gtk.EventControllerFocus()
+        self._focus_controller.connect("leave", self._on_focus_leave)
+        self.add_controller(self._focus_controller)
 
         self.connect("notify::scale-factor", self._on_scale_factor_changed)
         self.connect("unmap", lambda *_: self._cancel_animation())
@@ -122,6 +152,28 @@ class Canvas(Gtk.DrawingArea):
     @property
     def pan_y(self) -> float:
         return self.transform.pan_y
+
+    @property
+    def is_panning(self) -> bool:
+        return self._is_panning or self._is_space_panning
+
+    @property
+    def is_space_pressed(self) -> bool:
+        return self._space_pressed
+
+    @property
+    def current_cursor_name(self) -> str | None:
+        cursor = self.get_cursor()
+        return cursor.get_name() if cursor else None
+
+    @property
+    def tool_cursor_name(self) -> str | None:
+        return self._tool_cursor_name
+
+    @tool_cursor_name.setter
+    def tool_cursor_name(self, name: str | None) -> None:
+        self._tool_cursor_name = name
+        self._update_cursor()
 
     def add_view_changed_callback(self, cb: Callable[[], None]) -> None:
         if cb not in self._view_changed_callbacks:
@@ -499,8 +551,111 @@ class Canvas(Gtk.DrawingArea):
 
         return False
 
+    def _update_cursor(self, name: str | None = None) -> None:
+        if name is not None:
+            self.set_cursor_from_name(name)
+            return
+
+        if self._is_panning or self._is_space_panning:
+            self.set_cursor_from_name("grabbing")
+        elif self._space_pressed:
+            self.set_cursor_from_name("grab")
+        elif self._tool_cursor_name:
+            self.set_cursor_from_name(self._tool_cursor_name)
+        else:
+            self.set_cursor(None)
+
+    def _on_middle_drag_begin(
+        self, gesture: Gtk.GestureDrag, start_x: float, start_y: float
+    ) -> None:
+        self.grab_focus()
+        self._cancel_animation()
+        self._is_panning = True
+        self._drag_start_pan = (self.transform.pan_x, self.transform.pan_y)
+        self._update_cursor("grabbing")
+
+    def _on_middle_drag_update(
+        self, gesture: Gtk.GestureDrag, offset_x: float, offset_y: float
+    ) -> None:
+        if not self._is_panning:
+            return
+        self.set_pan(self._drag_start_pan[0] + offset_x, self._drag_start_pan[1] + offset_y)
+
+    def _on_middle_drag_end(
+        self, gesture: Gtk.GestureDrag, offset_x: float, offset_y: float
+    ) -> None:
+        if self._is_panning:
+            self.set_pan(self._drag_start_pan[0] + offset_x, self._drag_start_pan[1] + offset_y)
+            self._is_panning = False
+        self._update_cursor()
+
+    def _on_middle_drag_cancel(
+        self, gesture: Gtk.Gesture, sequence: Gdk.EventSequence | None
+    ) -> None:
+        self._is_panning = False
+        self._update_cursor()
+
+    def _on_primary_drag_begin(
+        self, gesture: Gtk.GestureDrag, start_x: float, start_y: float
+    ) -> None:
+        self.grab_focus()
+        if self._space_pressed:
+            self._cancel_animation()
+            self._is_space_panning = True
+            self._drag_start_pan = (self.transform.pan_x, self.transform.pan_y)
+            self._update_cursor("grabbing")
+        else:
+            self._is_space_panning = False
+
+    def _on_primary_drag_update(
+        self, gesture: Gtk.GestureDrag, offset_x: float, offset_y: float
+    ) -> None:
+        if self._is_space_panning:
+            self.set_pan(self._drag_start_pan[0] + offset_x, self._drag_start_pan[1] + offset_y)
+
+    def _on_primary_drag_end(
+        self, gesture: Gtk.GestureDrag, offset_x: float, offset_y: float
+    ) -> None:
+        if self._is_space_panning:
+            self.set_pan(self._drag_start_pan[0] + offset_x, self._drag_start_pan[1] + offset_y)
+            self._is_space_panning = False
+        self._update_cursor()
+
+    def _on_primary_drag_cancel(
+        self, gesture: Gtk.Gesture, sequence: Gdk.EventSequence | None
+    ) -> None:
+        self._is_space_panning = False
+        self._update_cursor()
+
+    def _on_focus_leave(self, controller: Gtk.EventControllerFocus) -> None:
+        if not (self._is_panning or self._is_space_panning):
+            self._space_pressed = False
+            self._update_cursor()
+
+    def handle_key_pressed(self, keyval: int, state: Gdk.ModifierType) -> bool:
+        if keyval == Gdk.KEY_space:
+            if not self._space_pressed:
+                self._space_pressed = True
+                if not (self._is_panning or self._is_space_panning):
+                    self._update_cursor("grab")
+            return True
+        return self.handle_keyboard_zoom(keyval, state)
+
+    def handle_key_released(self, keyval: int, state: Gdk.ModifierType) -> bool:
+        if keyval == Gdk.KEY_space:
+            self._space_pressed = False
+            if not (self._is_panning or self._is_space_panning):
+                self._update_cursor()
+            return True
+        return False
+
     def _on_key_pressed(
         self, controller: Gtk.EventControllerKey, keyval: int, keycode: int, state: Gdk.ModifierType
     ) -> bool:
-        return self.handle_keyboard_zoom(keyval, state)
+        return self.handle_key_pressed(keyval, state)
+
+    def _on_key_released(
+        self, controller: Gtk.EventControllerKey, keyval: int, keycode: int, state: Gdk.ModifierType
+    ) -> None:
+        self.handle_key_released(keyval, state)
 
