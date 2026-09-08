@@ -32,18 +32,18 @@ class EmptyStateView(Adw.Bin):
 
         self.btn_open = Gtk.Button(label="Open File...")
         self.btn_open.add_css_class("suggested-action")
-        self.btn_open.set_size_request(165, 32)
+        self.btn_open.set_size_request(145, 35)
         if on_open:
             self.btn_open.connect("clicked", lambda _: on_open())
         btn_box.append(self.btn_open)
 
         self.btn_paste = Gtk.Button(label="Paste from Clipboard")
-        self.btn_paste.set_size_request(165, 32)
+        self.btn_paste.set_size_request(145, 35)
         if on_paste:
             self.btn_paste.connect("clicked", lambda _: on_paste())
         btn_box.append(self.btn_paste)
 
-        tip_label = Gtk.Label(label="Tip: Use Ctrl+V to quickly paste a screenshot from the clipboard.")
+        tip_label = Gtk.Label(label="Tip: Ctrl+V to paste a screenshot from the clipboard")
         tip_label.add_css_class("dim-label")
         tip_label.set_margin_top(20)
         btn_box.append(tip_label)
