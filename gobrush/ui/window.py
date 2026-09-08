@@ -42,6 +42,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.empty_state = EmptyStateView(
             on_open=self._on_open_action,
             on_paste=self._on_paste_action,
+            on_guide=self._on_guide_action,
         )
         self.show_empty_state()
 
@@ -100,6 +101,9 @@ class MainWindow(Adw.ApplicationWindow):
             menu_model=menu,
         )
         self.header_bar.pack_end(self.menu_btn)
+
+    def _on_guide_action(self) -> None:
+        self.show_toast("Quick Start: Ctrl+O to open, Ctrl+V to paste, Ctrl+S to save")
 
     def set_has_image(self, has_image: bool) -> None:
         self.btn_copy.set_sensitive(has_image)

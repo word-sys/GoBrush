@@ -18,6 +18,7 @@ class TestEmptyState(unittest.TestCase):
     def test_empty_state_view_creation(self) -> None:
         opened = False
         pasted = False
+        guided = False
 
         def on_o() -> None:
             nonlocal opened
@@ -27,17 +28,25 @@ class TestEmptyState(unittest.TestCase):
             nonlocal pasted
             pasted = True
 
-        view = EmptyStateView(on_open=on_o, on_paste=on_p)
+        def on_g() -> None:
+            nonlocal guided
+            guided = True
+
+        view = EmptyStateView(on_open=on_o, on_paste=on_p, on_guide=on_g)
         self.assertIsInstance(view.status_page, Adw.StatusPage)
         self.assertEqual(view.status_page.get_title(), "GoBrush")
         self.assertEqual(view.btn_open.get_label(), "Open File...")
         self.assertEqual(view.btn_paste.get_label(), "Paste from Clipboard")
+        self.assertEqual(view.btn_guide.get_label(), "Quick Start Guide")
 
         view.btn_open.emit("clicked")
         self.assertTrue(opened)
 
         view.btn_paste.emit("clicked")
         self.assertTrue(pasted)
+
+        view.btn_guide.emit("clicked")
+        self.assertTrue(guided)
 
     def test_window_empty_state_integration(self) -> None:
         win = MainWindow()
