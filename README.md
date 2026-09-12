@@ -68,6 +68,8 @@ Open an image directly from the command line:
 | `Ctrl + 9` | Fit Image to Window |
 | Middle Mouse Drag | Pan viewport |
 | `Space` + Left Mouse Drag | Pan viewport |
+| `Two-Finger Pinch (Trackpad)` | Smooth zoom centered on pinch focus |
+| `Two-Finger Scroll / Swipe (Trackpad)` | Smooth kinetic pan viewport |
 | `Ctrl + O` | Open image file |
 | `Ctrl + S` | Save image |
 | `Ctrl + C` | Copy flattened image to clipboard |

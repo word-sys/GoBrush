@@ -46,6 +46,10 @@ class Canvas(Gtk.DrawingArea):
         self._drag_start_pan: tuple[float, float] = (0.0, 0.0)
         self._tool_cursor_name: str | None = None
 
+        # Trackpad and touchscreen pinch-to-zoom state
+        self._is_pinching: bool = False
+        self._last_gesture_scale: float = 1.0
+
         # Cursor tracking and event controllers
         self._cursor_pos: tuple[float, float] | None = None
         self._motion_controller = Gtk.EventControllerMotion()
@@ -54,10 +58,19 @@ class Canvas(Gtk.DrawingArea):
         self.add_controller(self._motion_controller)
 
         self._scroll_controller = Gtk.EventControllerScroll.new(
-            Gtk.EventControllerScrollFlags.BOTH_AXES
+            Gtk.EventControllerScrollFlags.BOTH_AXES | Gtk.EventControllerScrollFlags.KINETIC
         )
         self._scroll_controller.connect("scroll", self._on_scroll)
+        self._scroll_controller.connect("decelerate", self._on_scroll_decelerate)
         self.add_controller(self._scroll_controller)
+
+        # Pinch-to-zoom gesture (touchpad and touchscreen)
+        self._zoom_gesture = Gtk.GestureZoom()
+        self._zoom_gesture.connect("begin", self._on_zoom_gesture_begin)
+        self._zoom_gesture.connect("scale-changed", self._on_zoom_gesture_scale_changed)
+        self._zoom_gesture.connect("end", self._on_zoom_gesture_end)
+        self._zoom_gesture.connect("cancel", self._on_zoom_gesture_cancel)
+        self.add_controller(self._zoom_gesture)
 
         # Middle-click drag panning
         self._middle_drag = Gtk.GestureDrag()
@@ -210,6 +223,10 @@ class Canvas(Gtk.DrawingArea):
     @property
     def is_panning(self) -> bool:
         return self._is_panning or self._is_space_panning
+
+    @property
+    def is_pinching(self) -> bool:
+        return self._is_pinching
 
     @property
     def is_space_pressed(self) -> bool:
@@ -602,6 +619,57 @@ class Canvas(Gtk.DrawingArea):
         else:
             self.pan_by(-dx * 20.0, -dy * 20.0)
             return True
+
+    def _on_scroll_decelerate(
+        self, controller: Gtk.EventControllerScroll, vel_x: float, vel_y: float
+    ) -> None:
+        if abs(vel_x) < 10.0 and abs(vel_y) < 10.0:
+            return
+        # Smooth kinetic inertia coasting upon trackpad gesture release
+        distance_factor = 0.2
+        target_pan_x = self.pan_x - vel_x * distance_factor
+        target_pan_y = self.pan_y - vel_y * distance_factor
+        self.animate_to(self.zoom, target_pan_x, target_pan_y, duration_ms=250.0)
+
+    def _on_zoom_gesture_begin(
+        self, gesture: Gtk.GestureZoom, sequence: Gdk.EventSequence | None
+    ) -> None:
+        self.grab_focus()
+        self._cancel_animation()
+        self._is_pinching = True
+        self._last_gesture_scale = 1.0
+
+    def _on_zoom_gesture_scale_changed(
+        self, gesture: Gtk.GestureZoom, scale: float
+    ) -> None:
+        if not self._is_pinching or scale <= 0:
+            return
+
+        seq = gesture.get_last_updated_sequence()
+        ok = False
+        cx, cy = 0.0, 0.0
+        if gesture.get_last_event(seq) is not None:
+            ok, cx, cy = gesture.get_bounding_box_center()
+
+        if not ok:
+            cx, cy = self._cursor_pos or (self.viewport_width / 2.0, self.viewport_height / 2.0)
+
+        if self._last_gesture_scale > 0:
+            factor = scale / self._last_gesture_scale
+            self.zoom_by(factor, pivot=(cx, cy))
+        self._last_gesture_scale = scale
+
+    def _on_zoom_gesture_end(
+        self, gesture: Gtk.GestureZoom, sequence: Gdk.EventSequence | None
+    ) -> None:
+        self._is_pinching = False
+        self._last_gesture_scale = 1.0
+
+    def _on_zoom_gesture_cancel(
+        self, gesture: Gtk.GestureZoom, sequence: Gdk.EventSequence | None
+    ) -> None:
+        self._is_pinching = False
+        self._last_gesture_scale = 1.0
 
     def handle_keyboard_zoom(self, keyval: int, state: Gdk.ModifierType) -> bool:
         is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
