@@ -1,12 +1,16 @@
-from __future__ import annotations
+import os
+import urllib.parse
+from pathlib import Path
+from typing import Any
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Gdk, Adw, Gio, GLib
+from gi.repository import Gtk, Gdk, Adw, Gio, GLib, GObject
 
 from gobrush import __version__
 from gobrush.compat.dialogs import open_file_dialog
+from gobrush.core.loader import load_image_with_info, is_supported_image, ImageLoadError
 from gobrush.ui.empty_state import EmptyStateView
 from gobrush.ui.canvas import Canvas
 from gobrush.ui.canvas_view import CanvasView
@@ -36,6 +40,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._build_menu()
         self._build_header_actions()
 
+        self._current_file_path: str | None = None
         self.canvas_view = CanvasView()
         self.canvas = self.canvas_view.canvas
         self.status_bar = self.canvas_view.status_bar
@@ -50,6 +55,12 @@ class MainWindow(Adw.ApplicationWindow):
         self._key_controller.connect("key-pressed", self._on_key_pressed)
         self._key_controller.connect("key-released", self._on_key_released)
         self.add_controller(self._key_controller)
+
+        # Drag-and-drop target accepting file drops across window
+        self._drop_target = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+        self._drop_target.set_gtypes([Gdk.FileList, Gio.File, GObject.TYPE_STRING])
+        self._drop_target.connect("drop", self._on_drop)
+        self.add_controller(self._drop_target)
 
     def _build_header_actions(self) -> None:
         self.btn_open = Gtk.Button(
@@ -146,9 +157,121 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_open_action(self) -> None:
         open_file_dialog(self, self._on_file_selected)
 
+    @property
+    def current_file_path(self) -> str | None:
+        return self._current_file_path
+
+    @property
+    def drop_target(self) -> Gtk.DropTarget:
+        return self._drop_target
+
+    def open_file(self, path: str | Path) -> bool:
+        p = Path(path).expanduser().resolve()
+        if not p.is_file():
+            self.show_toast(f"File not found: {p.name}")
+            return False
+
+        if not is_supported_image(p):
+            self.show_toast(f"Unsupported image format: {p.suffix or p.name}")
+            return False
+
+        try:
+            surface, has_alpha = load_image_with_info(p)
+        except ImageLoadError as e:
+            self.show_toast(f"Failed to open image: {e}")
+            return False
+        except Exception as e:
+            self.show_toast(f"Error opening image: {e}")
+            return False
+
+        self.canvas.set_image_surface(
+            surface,
+            surface.get_width(),
+            surface.get_height(),
+            has_alpha=has_alpha,
+        )
+        self.show_canvas()
+        self.canvas.zoom_fit()
+        self._current_file_path = str(p)
+        self.set_title(f"{p.name} - GoBrush")
+        return True
+
+    def close_file(self) -> None:
+        self.canvas.clear()
+        self._current_file_path = None
+        self.set_title("GoBrush")
+        self.show_empty_state()
+
+    @staticmethod
+    def _extract_paths_from_drop_value(value: Any) -> list[str]:
+        paths: list[str] = []
+        if value is None:
+            return paths
+
+        if hasattr(value, "get_files"):
+            try:
+                for gfile in value.get_files():
+                    p = gfile.get_path()
+                    if p:
+                        paths.append(p)
+                    else:
+                        uri = gfile.get_uri()
+                        if uri and uri.startswith("file://"):
+                            parsed = urllib.parse.urlparse(uri)
+                            paths.append(urllib.parse.unquote(parsed.path))
+            except Exception:
+                pass
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                if hasattr(item, "get_path"):
+                    p = item.get_path()
+                    if p:
+                        paths.append(p)
+                elif isinstance(item, str):
+                    paths.extend(MainWindow._extract_paths_from_drop_value(item))
+        elif hasattr(value, "get_path"):
+            p = value.get_path()
+            if p:
+                paths.append(p)
+            elif hasattr(value, "get_uri"):
+                uri = value.get_uri()
+                if uri and uri.startswith("file://"):
+                    parsed = urllib.parse.urlparse(uri)
+                    paths.append(urllib.parse.unquote(parsed.path))
+        elif isinstance(value, str):
+            for line in value.strip().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("file://"):
+                    parsed = urllib.parse.urlparse(line)
+                    paths.append(urllib.parse.unquote(parsed.path))
+                elif os.path.isabs(line):
+                    paths.append(line)
+        return paths
+
+    def _on_drop(self, target: Gtk.DropTarget, value: Any, x: float, y: float) -> bool:
+        paths = self._extract_paths_from_drop_value(value)
+        if not paths:
+            self.show_toast("No dropped files detected")
+            return False
+
+        first_image_path: str | None = None
+        for p in paths:
+            if is_supported_image(p):
+                first_image_path = p
+                break
+
+        if not first_image_path:
+            ext = os.path.splitext(paths[0])[1] or Path(paths[0]).name
+            self.show_toast(f"Unsupported file format: {ext}")
+            return False
+
+        return self.open_file(first_image_path)
+
     def _on_file_selected(self, path: str | None) -> None:
         if path:
-            self.show_toast(f"Opened: {path}")
+            self.open_file(path)
 
     def _on_paste_action(self) -> None:
         self.show_toast("Clipboard paste ready")
