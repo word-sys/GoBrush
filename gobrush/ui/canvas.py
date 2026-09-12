@@ -33,6 +33,7 @@ class Canvas(Gtk.DrawingArea):
         self._checkerboard_tile_size: int = 10
         self._checkerboard_pattern: cairo.SurfacePattern | None = None
         self._cached_scale_factor: int = 1
+        self._crisp_zoom: bool = True
 
         self._view_changed_callbacks: list[Callable[[], None]] = []
         self._anim_tick_id: int | None = None
@@ -107,6 +108,22 @@ class Canvas(Gtk.DrawingArea):
     def show_checkerboard(self, show: bool) -> None:
         self._show_checkerboard = show
         self.queue_draw()
+
+    @property
+    def crisp_zoom(self) -> bool:
+        return self._crisp_zoom
+
+    @crisp_zoom.setter
+    def crisp_zoom(self, enabled: bool) -> None:
+        if self._crisp_zoom != enabled:
+            self._crisp_zoom = bool(enabled)
+            self.queue_draw()
+
+    def get_active_filter(self) -> int:
+        # Nearest-neighbor when magnified prevents bilinear interpolation blur
+        if self._crisp_zoom and self.zoom >= 1.0:
+            return cairo.FILTER_NEAREST
+        return cairo.FILTER_GOOD
 
     @property
     def scale_factor(self) -> int:
@@ -479,8 +496,11 @@ class Canvas(Gtk.DrawingArea):
                 cr.fill()
                 cr.restore()
 
-            # Render image surface
+            # Render image surface with adaptive sampling filter
             cr.set_source_surface(self._image_surface, 0, 0)
+            pattern = cr.get_source()
+            if pattern is not None:
+                pattern.set_filter(self.get_active_filter())
             cr.paint()
 
             # Draw subtle image boundary outline
