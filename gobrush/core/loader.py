@@ -28,6 +28,11 @@ def is_supported_image(path: Union[str, Path]) -> bool:
 
 
 def pil_to_cairo_surface(im: Image.Image) -> cairo.ImageSurface:
+    surface, _ = pil_to_cairo_surface_with_info(im)
+    return surface
+
+
+def pil_to_cairo_surface_with_info(im: Image.Image) -> tuple[cairo.ImageSurface, bool]:
     # Handle EXIF orientation tag if present
     im = ImageOps.exif_transpose(im)
     if im.mode != "RGBA":
@@ -37,6 +42,7 @@ def pil_to_cairo_surface(im: Image.Image) -> cairo.ImageSurface:
     # Check if image is fully opaque
     extrema = im.getextrema()
     is_opaque = len(extrema) >= 4 and extrema[3][0] == 255
+    has_alpha = not is_opaque
 
     if is_opaque:
         # Fast path for opaque images: BGRA native byte order without premultiplication
@@ -74,7 +80,7 @@ def pil_to_cairo_surface(im: Image.Image) -> cairo.ImageSurface:
     cr = cairo.Context(surface)
     cr.set_source_surface(temp, 0, 0)
     cr.paint()
-    return surface
+    return surface, has_alpha
 
 
 def cairo_surface_to_pil(surface: cairo.ImageSurface) -> Image.Image:
@@ -121,28 +127,36 @@ def cairo_surface_to_pil(surface: cairo.ImageSurface) -> Image.Image:
 
 
 def load_image(source: Union[str, Path, io.BytesIO, bytes]) -> cairo.ImageSurface:
+    surface, _ = load_image_with_info(source)
+    return surface
+
+
+def load_image_with_info(
+    source: Union[str, Path, io.BytesIO, bytes],
+) -> tuple[cairo.ImageSurface, bool]:
     if isinstance(source, (str, Path)):
         p = Path(source).expanduser().resolve()
         if not p.is_file():
             raise ImageLoadError(f"File not found: {source}")
         try:
             with Image.open(p) as im:
-                return pil_to_cairo_surface(im)
+                return pil_to_cairo_surface_with_info(im)
         except (UnidentifiedImageError, OSError, ValueError) as e:
             raise ImageLoadError(f"Cannot read image file '{source}': {e}") from e
 
     elif isinstance(source, (bytes, bytearray)):
         try:
             with Image.open(io.BytesIO(source)) as im:
-                return pil_to_cairo_surface(im)
+                return pil_to_cairo_surface_with_info(im)
         except (UnidentifiedImageError, OSError, ValueError) as e:
             raise ImageLoadError(f"Cannot decode image bytes: {e}") from e
 
     elif hasattr(source, "read"):
         try:
             with Image.open(source) as im:
-                return pil_to_cairo_surface(im)
+                return pil_to_cairo_surface_with_info(im)
         except (UnidentifiedImageError, OSError, ValueError) as e:
             raise ImageLoadError(f"Cannot decode image stream: {e}") from e
 
     raise ImageLoadError(f"Unsupported image source type: {type(source)}")
+

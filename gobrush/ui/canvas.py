@@ -34,6 +34,7 @@ class Canvas(Gtk.DrawingArea):
         self._checkerboard_pattern: cairo.SurfacePattern | None = None
         self._cached_scale_factor: int = 1
         self._crisp_zoom: bool = True
+        self._image_has_alpha: bool = True
 
         self._view_changed_callbacks: list[Callable[[], None]] = []
         self._anim_tick_id: int | None = None
@@ -124,6 +125,42 @@ class Canvas(Gtk.DrawingArea):
         if self._crisp_zoom and self.zoom >= 1.0:
             return cairo.FILTER_NEAREST
         return cairo.FILTER_GOOD
+
+    @property
+    def image_has_alpha(self) -> bool:
+        return self._image_has_alpha
+
+    @image_has_alpha.setter
+    def image_has_alpha(self, has_alpha: bool) -> None:
+        if self._image_has_alpha != has_alpha:
+            self._image_has_alpha = bool(has_alpha)
+            self.queue_draw()
+
+    def get_visible_image_rect(
+        self,
+        viewport_width: int | None = None,
+        viewport_height: int | None = None,
+    ) -> tuple[float, float, float, float] | None:
+        if not self.has_image or self._image_width <= 0 or self._image_height <= 0:
+            return None
+
+        vw = viewport_width if viewport_width is not None else self.viewport_width
+        vh = viewport_height if viewport_height is not None else self.viewport_height
+        if vw <= 0 or vh <= 0:
+            return None
+
+        sx0, sy0 = self.transform.screen_to_image(0.0, 0.0)
+        sx1, sy1 = self.transform.screen_to_image(float(vw), float(vh))
+
+        vx0 = max(0.0, sx0)
+        vy0 = max(0.0, sy0)
+        vx1 = min(float(self._image_width), sx1)
+        vy1 = min(float(self._image_height), sy1)
+
+        if vx1 <= vx0 or vy1 <= vy0:
+            return None
+
+        return vx0, vy0, vx1 - vx0, vy1 - vy0
 
     @property
     def scale_factor(self) -> int:
@@ -418,15 +455,21 @@ class Canvas(Gtk.DrawingArea):
         surface: cairo.ImageSurface | None,
         width: int | None = None,
         height: int | None = None,
+        has_alpha: bool | None = None,
     ) -> None:
         self._cancel_animation()
         self._image_surface = surface
         if surface is not None:
             self._image_width = width if width is not None else surface.get_width()
             self._image_height = height if height is not None else surface.get_height()
+            if has_alpha is not None:
+                self._image_has_alpha = bool(has_alpha)
+            else:
+                self._image_has_alpha = surface.get_format() == cairo.FORMAT_ARGB32
         else:
             self._image_width = 0
             self._image_height = 0
+            self._image_has_alpha = True
             self.transform.reset()
         self.queue_draw()
         self._notify_view_changed()
@@ -484,32 +527,42 @@ class Canvas(Gtk.DrawingArea):
         cr.save()
         self.transform.apply_to_cairo(cr)
         if self._image_surface is not None:
-            # Render checkerboard behind transparent image pixels
-            if self._show_checkerboard:
+            vis_rect = self.get_visible_image_rect(width, height)
+            if vis_rect is not None:
+                vx, vy, vw, vh = vis_rect
+
+                # Render checkerboard behind transparent image pixels only within visible rect
+                if self._show_checkerboard and self._image_has_alpha:
+                    cr.save()
+                    pattern = self._get_checkerboard_pattern()
+                    pat_matrix = cairo.Matrix()
+                    pat_matrix.scale(self.zoom, self.zoom)
+                    pattern.set_matrix(pat_matrix)
+                    cr.set_source(pattern)
+                    cr.rectangle(vx, vy, vw, vh)
+                    cr.fill()
+                    cr.restore()
+
+                # Clip to visible viewport rectangle to eliminate overdraw on large surfaces
                 cr.save()
-                pattern = self._get_checkerboard_pattern()
-                pat_matrix = cairo.Matrix()
-                pat_matrix.scale(self.zoom, self.zoom)
-                pattern.set_matrix(pat_matrix)
-                cr.set_source(pattern)
-                cr.rectangle(0, 0, self._image_width, self._image_height)
-                cr.fill()
+                cr.rectangle(vx, vy, vw, vh)
+                cr.clip()
+
+                # Render image surface with adaptive sampling filter
+                cr.set_source_surface(self._image_surface, 0, 0)
+                pattern = cr.get_source()
+                if pattern is not None:
+                    pattern.set_filter(self.get_active_filter())
+                cr.paint()
                 cr.restore()
 
-            # Render image surface with adaptive sampling filter
-            cr.set_source_surface(self._image_surface, 0, 0)
-            pattern = cr.get_source()
-            if pattern is not None:
-                pattern.set_filter(self.get_active_filter())
-            cr.paint()
-
-            # Draw subtle image boundary outline
-            cr.save()
-            cr.set_line_width(1.0 / self.zoom)
-            cr.set_source_rgba(0.0, 0.0, 0.0, 0.25)
-            cr.rectangle(0, 0, self._image_width, self._image_height)
-            cr.stroke()
-            cr.restore()
+                # Draw subtle image boundary outline
+                cr.save()
+                cr.set_line_width(1.0 / self.zoom)
+                cr.set_source_rgba(0.0, 0.0, 0.0, 0.25)
+                cr.rectangle(0, 0, self._image_width, self._image_height)
+                cr.stroke()
+                cr.restore()
 
         for hook in self._image_draw_hooks:
             cr.save()
