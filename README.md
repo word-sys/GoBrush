@@ -66,7 +66,7 @@ Open an image directly from the command line:
 | `Ctrl + -` | Zoom Out |
 | `Ctrl + 0` | 1:1 Actual Size (100%) |
 | `Ctrl + 9` | Fit Image to Window |
-| Middle Mouse Drag | Pan viewport |
+| `Middle Mouse Drag` | Pan viewport |
 | `Space` + Left Mouse Drag | Pan viewport |
 | `Two-Finger Pinch (Trackpad)` | Smooth zoom centered on pinch focus |
 | `Two-Finger Scroll / Swipe (Trackpad)` | Smooth kinetic pan viewport |
