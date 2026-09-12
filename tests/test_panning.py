@@ -105,8 +105,44 @@ class TestCanvasPanning(unittest.TestCase):
         self.assertFalse(self.canvas.is_panning)
         self.assertIsNone(self.canvas.current_cursor_name)
 
-    def test_left_click_without_space_does_not_pan(self) -> None:
+    def test_left_click_drag_pans_in_navigate_mode(self) -> None:
         gesture = self.canvas._primary_drag
+        self.canvas.tool_cursor_name = None
+        self.assertTrue(self.canvas.drag_to_pan)
+
+        self.canvas._on_primary_drag_begin(gesture, 5.0, 5.0)
+        self.assertTrue(self.canvas.is_panning)
+        self.assertEqual(self.canvas.current_cursor_name, "grabbing")
+
+        self.canvas._on_primary_drag_update(gesture, 40.0, 60.0)
+        self.assertAlmostEqual(self.canvas.pan_x, 140.0)
+        self.assertAlmostEqual(self.canvas.pan_y, 260.0)
+
+        self.canvas._on_primary_drag_end(gesture, 40.0, 60.0)
+        self.assertFalse(self.canvas.is_panning)
+        self.assertAlmostEqual(self.canvas.pan_x, 140.0)
+        self.assertAlmostEqual(self.canvas.pan_y, 260.0)
+        self.assertIsNone(self.canvas.current_cursor_name)
+
+    def test_left_click_with_active_tool_does_not_pan(self) -> None:
+        gesture = self.canvas._primary_drag
+        self.canvas.tool_cursor_name = "crosshair"
+
+        self.canvas._on_primary_drag_begin(gesture, 5.0, 5.0)
+        self.assertFalse(self.canvas.is_panning)
+        self.assertEqual(self.canvas.current_cursor_name, "crosshair")
+
+        self.canvas._on_primary_drag_update(gesture, 100.0, 100.0)
+        self.assertAlmostEqual(self.canvas.pan_x, 100.0)
+        self.assertAlmostEqual(self.canvas.pan_y, 200.0)
+
+        self.canvas._on_primary_drag_end(gesture, 100.0, 100.0)
+        self.assertFalse(self.canvas.is_panning)
+        self.assertEqual(self.canvas.current_cursor_name, "crosshair")
+
+    def test_left_click_with_drag_to_pan_disabled_does_not_pan(self) -> None:
+        gesture = self.canvas._primary_drag
+        self.canvas.drag_to_pan = False
 
         self.canvas._on_primary_drag_begin(gesture, 5.0, 5.0)
         self.assertFalse(self.canvas.is_panning)
@@ -117,8 +153,6 @@ class TestCanvasPanning(unittest.TestCase):
 
         self.canvas._on_primary_drag_end(gesture, 100.0, 100.0)
         self.assertFalse(self.canvas.is_panning)
-        self.assertAlmostEqual(self.canvas.pan_x, 100.0)
-        self.assertAlmostEqual(self.canvas.pan_y, 200.0)
 
     def test_tool_cursor_restoration(self) -> None:
         self.canvas.tool_cursor_name = "crosshair"

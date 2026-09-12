@@ -36,14 +36,15 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.content_bin = Adw.Bin()
         self.toast_overlay.set_child(self.content_bin)
-
-        self._build_menu()
-        self._build_header_actions()
-
         self._current_file_path: str | None = None
         self.canvas_view = CanvasView()
         self.canvas = self.canvas_view.canvas
         self.status_bar = self.canvas_view.status_bar
+
+        self._build_actions()
+        self._build_menu()
+        self._build_header_actions()
+
         self.empty_state = EmptyStateView(
             on_open=self._on_open_action,
             on_paste=self._on_paste_action,
@@ -61,6 +62,19 @@ class MainWindow(Adw.ApplicationWindow):
         self._drop_target.set_gtypes([Gdk.FileList, Gio.File, GObject.TYPE_STRING])
         self._drop_target.connect("drop", self._on_drop)
         self.add_controller(self._drop_target)
+
+    def _build_actions(self) -> None:
+        self._action_scroll_to_zoom = Gio.SimpleAction.new_stateful(
+            "scroll-to-zoom",
+            None,
+            GLib.Variant.new_boolean(self.canvas.scroll_to_zoom),
+        )
+        self._action_scroll_to_zoom.connect("change-state", self._on_scroll_to_zoom_changed)
+        self.add_action(self._action_scroll_to_zoom)
+
+    def _on_scroll_to_zoom_changed(self, action: Gio.SimpleAction, value: GLib.Variant) -> None:
+        action.set_state(value)
+        self.canvas.scroll_to_zoom = value.get_boolean()
 
     def _build_header_actions(self) -> None:
         self.btn_open = Gtk.Button(
@@ -102,6 +116,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _build_menu(self) -> None:
         menu = Gio.Menu()
         menu.append("Paste from Clipboard", "app.paste-clipboard")
+        menu.append("Zoom on Scroll", "win.scroll-to-zoom")
         menu.append("Keyboard Shortcuts", "app.shortcuts")
         menu.append("About GoBrush", "app.about")
 
@@ -164,6 +179,10 @@ class MainWindow(Adw.ApplicationWindow):
     @property
     def drop_target(self) -> Gtk.DropTarget:
         return self._drop_target
+
+    @property
+    def action_scroll_to_zoom(self) -> Gio.SimpleAction:
+        return self._action_scroll_to_zoom
 
     def open_file(self, path: str | Path) -> bool:
         p = Path(path).expanduser().resolve()

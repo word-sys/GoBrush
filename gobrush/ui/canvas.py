@@ -45,6 +45,11 @@ class Canvas(Gtk.DrawingArea):
         self._space_pressed: bool = False
         self._drag_start_pan: tuple[float, float] = (0.0, 0.0)
         self._tool_cursor_name: str | None = None
+        self._drag_to_pan: bool = True
+
+        # Scroll navigation state (General navigation: scroll-to-zoom default)
+        self._scroll_to_zoom: bool = True
+        self._last_scroll_was_pan: bool = True
 
         # Trackpad and touchscreen pinch-to-zoom state
         self._is_pinching: bool = False
@@ -56,6 +61,12 @@ class Canvas(Gtk.DrawingArea):
         self._motion_controller.connect("motion", self._on_motion_internal)
         self._motion_controller.connect("leave", self._on_leave_internal)
         self.add_controller(self._motion_controller)
+
+        # Double-click gesture to toggle Fit to Window <-> 100%
+        self._click_gesture = Gtk.GestureClick()
+        self._click_gesture.set_button(Gdk.BUTTON_PRIMARY)
+        self._click_gesture.connect("pressed", self._on_click_pressed)
+        self.add_controller(self._click_gesture)
 
         self._scroll_controller = Gtk.EventControllerScroll.new(
             Gtk.EventControllerScrollFlags.BOTH_AXES | Gtk.EventControllerScrollFlags.KINETIC
@@ -231,6 +242,22 @@ class Canvas(Gtk.DrawingArea):
     @property
     def is_space_pressed(self) -> bool:
         return self._space_pressed
+
+    @property
+    def scroll_to_zoom(self) -> bool:
+        return self._scroll_to_zoom
+
+    @scroll_to_zoom.setter
+    def scroll_to_zoom(self, enabled: bool) -> None:
+        self._scroll_to_zoom = bool(enabled)
+
+    @property
+    def drag_to_pan(self) -> bool:
+        return self._drag_to_pan
+
+    @drag_to_pan.setter
+    def drag_to_pan(self, enabled: bool) -> None:
+        self._drag_to_pan = bool(enabled)
 
     @property
     def current_cursor_name(self) -> str | None:
@@ -422,6 +449,46 @@ class Canvas(Gtk.DrawingArea):
             self.queue_draw()
             self._notify_view_changed()
 
+    def toggle_zoom_fit_actual(
+        self,
+        pivot: tuple[float, float] | None = None,
+        viewport_width: int | None = None,
+        viewport_height: int | None = None,
+        animate: bool = True,
+    ) -> None:
+        if not self.has_image:
+            return
+
+        vw = viewport_width if viewport_width is not None else self.viewport_width
+        vh = viewport_height if viewport_height is not None else self.viewport_height
+
+        fit_zoom, _, _ = self.get_fit_target(viewport_width=vw, viewport_height=vh)
+        if abs(self.zoom - fit_zoom) < 0.05 and abs(fit_zoom - 1.0) >= 0.01:
+            target_zoom = 1.0
+            if pivot is not None and vw > 0 and vh > 0:
+                px, py = pivot
+                ix, iy = self.screen_to_image(px, py)
+                target_pan_x = px - ix * target_zoom
+                target_pan_y = py - iy * target_zoom
+            elif vw > 0 and vh > 0:
+                target_pan_x = (vw - self._image_width * target_zoom) / 2.0
+                target_pan_y = (vh - self._image_height * target_zoom) / 2.0
+            else:
+                target_pan_x = self.pan_x
+                target_pan_y = self.pan_y
+
+            if animate and self.get_mapped():
+                self.animate_to(target_zoom, target_pan_x, target_pan_y)
+            else:
+                self._cancel_animation()
+                self.transform.zoom = target_zoom
+                self.transform.pan_x = target_pan_x
+                self.transform.pan_y = target_pan_y
+                self.queue_draw()
+                self._notify_view_changed()
+        else:
+            self.zoom_fit(viewport_width=vw, viewport_height=vh, animate=animate)
+
     def zoom_in(self, factor: float = 1.25, pivot: tuple[float, float] | None = None) -> None:
         if pivot is None:
             pivot = self._cursor_pos or (self.viewport_width / 2.0, self.viewport_height / 2.0)
@@ -605,24 +672,45 @@ class Canvas(Gtk.DrawingArea):
     def _on_leave_internal(self, controller: Gtk.EventControllerMotion) -> None:
         self._cursor_pos = None
 
+    def _on_click_pressed(
+        self, gesture: Gtk.GestureClick, n_press: int, x: float, y: float
+    ) -> None:
+        if n_press == 2 and self.has_image:
+            self.toggle_zoom_fit_actual(pivot=(x, y))
+
     def _on_scroll(
         self, controller: Gtk.EventControllerScroll, dx: float, dy: float
     ) -> bool:
         state = controller.get_current_event_state()
         is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        is_shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
 
-        if is_ctrl:
-            pivot = self._cursor_pos or (self.viewport_width / 2.0, self.viewport_height / 2.0)
-            factor = 1.15 ** (-dy)
-            self.zoom_by(factor, pivot=pivot)
-            return True
+        should_zoom = is_ctrl or (self._scroll_to_zoom and not is_shift)
+        if should_zoom:
+            if dy != 0.0:
+                self._last_scroll_was_pan = False
+                pivot = self._cursor_pos or (self.viewport_width / 2.0, self.viewport_height / 2.0)
+                factor = 1.15 ** (-dy)
+                self.zoom_by(factor, pivot=pivot)
+                return True
+            elif dx != 0.0:
+                self._last_scroll_was_pan = True
+                self.pan_by(-dx * 20.0, 0.0)
+                return True
+            return False
         else:
-            self.pan_by(-dx * 20.0, -dy * 20.0)
+            self._last_scroll_was_pan = True
+            if is_shift and dx == 0.0 and dy != 0.0:
+                self.pan_by(-dy * 20.0, 0.0)
+            else:
+                self.pan_by(-dx * 20.0, -dy * 20.0)
             return True
 
     def _on_scroll_decelerate(
         self, controller: Gtk.EventControllerScroll, vel_x: float, vel_y: float
     ) -> None:
+        if not self._last_scroll_was_pan:
+            return
         if abs(vel_x) < 10.0 and abs(vel_y) < 10.0:
             return
         # Smooth kinetic inertia coasting upon trackpad gesture release
@@ -674,21 +762,36 @@ class Canvas(Gtk.DrawingArea):
     def handle_keyboard_zoom(self, keyval: int, state: Gdk.ModifierType) -> bool:
         is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
         is_alt = bool(state & Gdk.ModifierType.ALT_MASK)
-        if not is_ctrl or is_alt:
+        if is_alt:
             return False
 
-        if keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
-            self.zoom_in()
-            return True
-        elif keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract, Gdk.KEY_underscore):
-            self.zoom_out()
-            return True
-        elif keyval in (Gdk.KEY_0, Gdk.KEY_KP_0):
-            self.zoom_actual_size()
-            return True
-        elif keyval in (Gdk.KEY_9, Gdk.KEY_KP_9):
-            self.zoom_fit()
-            return True
+        if is_ctrl:
+            if keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
+                self.zoom_in()
+                return True
+            elif keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract, Gdk.KEY_underscore):
+                self.zoom_out()
+                return True
+            elif keyval in (Gdk.KEY_0, Gdk.KEY_KP_0, Gdk.KEY_1, Gdk.KEY_KP_1):
+                self.zoom_actual_size()
+                return True
+            elif keyval in (Gdk.KEY_9, Gdk.KEY_KP_9):
+                self.zoom_fit()
+                return True
+        else:
+            # Direct general navigation shortcuts (no Ctrl modifier)
+            if keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
+                self.zoom_in()
+                return True
+            elif keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract, Gdk.KEY_underscore):
+                self.zoom_out()
+                return True
+            elif keyval in (Gdk.KEY_1, Gdk.KEY_KP_1):
+                self.zoom_actual_size()
+                return True
+            elif keyval in (Gdk.KEY_f, Gdk.KEY_F):
+                self.zoom_fit()
+                return True
 
         return False
 
@@ -740,7 +843,7 @@ class Canvas(Gtk.DrawingArea):
         self, gesture: Gtk.GestureDrag, start_x: float, start_y: float
     ) -> None:
         self.grab_focus()
-        if self._space_pressed:
+        if self._space_pressed or (self._drag_to_pan and self._tool_cursor_name is None):
             self._cancel_animation()
             self._is_space_panning = True
             self._drag_start_pan = (self.transform.pan_x, self.transform.pan_y)
@@ -780,6 +883,22 @@ class Canvas(Gtk.DrawingArea):
                 if not (self._is_panning or self._is_space_panning):
                     self._update_cursor("grab")
             return True
+
+        # Viewport navigation via arrow keys (general navigation standard)
+        step = 150.0 if bool(state & Gdk.ModifierType.SHIFT_MASK) else 50.0
+        if keyval in (Gdk.KEY_Left, Gdk.KEY_KP_Left):
+            self.pan_by(step, 0.0)
+            return True
+        elif keyval in (Gdk.KEY_Right, Gdk.KEY_KP_Right):
+            self.pan_by(-step, 0.0)
+            return True
+        elif keyval in (Gdk.KEY_Up, Gdk.KEY_KP_Up):
+            self.pan_by(0.0, step)
+            return True
+        elif keyval in (Gdk.KEY_Down, Gdk.KEY_KP_Down):
+            self.pan_by(0.0, -step)
+            return True
+
         return self.handle_keyboard_zoom(keyval, state)
 
     def handle_key_released(self, keyval: int, state: Gdk.ModifierType) -> bool:

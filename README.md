@@ -20,7 +20,7 @@ A lightweight, fast image annotation and screenshot markup utility for Linux des
 
 ## Requirements
 
-- **OS**: Linux (Ubuntu 22.04 LTS or newer / GNOME 42+)
+- **OS**: Linux (Ubuntu 22.04 LTS / Debian 12 or newer)
 - **Python**: 3.10 or newer
 - **Libraries**: GTK 4.6+, Libadwaita 1.0+, Cairo, Pillow
 
@@ -61,15 +61,17 @@ Open an image directly from the command line:
 
 | Shortcut / Gesture | Action |
 | --- | --- |
-| `Ctrl + Mouse Scroll` | Zoom in / out centered on cursor |
-| `Ctrl + +` / `Ctrl + =` | Zoom In |
-| `Ctrl + -` | Zoom Out |
-| `Ctrl + 0` | 1:1 Actual Size (100%) |
-| `Ctrl + 9` | Fit Image to Window |
+| `Trackpad 2-Finger Scroll` / `Mouse Wheel` | Direct zoom in / out centered on cursor (default) |
+| `Shift + Scroll` | Pan viewport |
+| `Left Mouse Drag` | Pan viewport (in navigation mode or holding `Space`) |
 | `Middle Mouse Drag` | Pan viewport |
-| `Space + Left Mouse Drag` | Pan viewport |
-| `Two-Finger Pinch (Trackpad)` | Smooth zoom centered on pinch focus |
-| `Two-Finger Scroll / Swipe (Trackpad)` | Smooth kinetic pan viewport |
+| `Double Click` | Toggle between Fit to Window and 100% (1:1 actual size) |
+| `+` / `=` / `Ctrl + +` / `Ctrl + =` | Zoom In |
+| `-` / `Ctrl + -` | Zoom Out |
+| `1` / `Ctrl + 0` | 1:1 Actual Size (100%) |
+| `F` / `Ctrl + 9` | Fit Image to Window |
+| `Arrow Keys` (`Left`, `Right`, `Up`, `Down`) | Pan viewport (hold `Shift` for 3x speed) |
+| `Two-Finger Pinch (Trackpad)` | Smooth pinch zoom centered on pinch focus |
 | `Ctrl + O` | Open image file |
 | `Ctrl + S` | Save image |
 | `Ctrl + C` | Copy flattened image to clipboard |

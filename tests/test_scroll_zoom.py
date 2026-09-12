@@ -74,8 +74,52 @@ class TestScrollZoom(unittest.TestCase):
         self.assertAlmostEqual(ix_before, ix_after, places=5)
         self.assertAlmostEqual(iy_before, iy_after, places=5)
 
-    def test_normal_scroll_pans_canvas(self) -> None:
+    def test_default_scroll_to_zoom_without_ctrl(self) -> None:
         canvas = Canvas()
+        self.assertTrue(canvas.scroll_to_zoom)
+        self.assertEqual(canvas.zoom, 1.0)
+
+        mock_ctrl = Mock()
+        mock_ctrl.get_current_event_state.return_value = Gdk.ModifierType(0)
+
+        # Normal scroll up zooms in directly (general navigation standard)
+        handled = canvas._on_scroll(mock_ctrl, 0.0, -1.0)
+        self.assertTrue(handled)
+        self.assertAlmostEqual(canvas.zoom, 1.15, places=5)
+
+        # Normal scroll down zooms back out
+        handled = canvas._on_scroll(mock_ctrl, 0.0, 1.0)
+        self.assertTrue(handled)
+        self.assertAlmostEqual(canvas.zoom, 1.0, places=5)
+
+    def test_shift_scroll_pans_canvas(self) -> None:
+        canvas = Canvas()
+        self.assertEqual((canvas.pan_x, canvas.pan_y), (0.0, 0.0))
+
+        mock_ctrl = Mock()
+        mock_ctrl.get_current_event_state.return_value = Gdk.ModifierType.SHIFT_MASK
+
+        handled = canvas._on_scroll(mock_ctrl, 2.0, 3.0)
+        self.assertTrue(handled)
+        self.assertEqual(canvas.pan_x, -40.0)
+        self.assertEqual(canvas.pan_y, -60.0)
+
+    def test_horizontal_scroll_pans_canvas(self) -> None:
+        canvas = Canvas()
+        self.assertEqual((canvas.pan_x, canvas.pan_y), (0.0, 0.0))
+
+        mock_ctrl = Mock()
+        mock_ctrl.get_current_event_state.return_value = Gdk.ModifierType(0)
+
+        handled = canvas._on_scroll(mock_ctrl, 2.0, 0.0)
+        self.assertTrue(handled)
+        self.assertEqual(canvas.pan_x, -40.0)
+        self.assertEqual(canvas.pan_y, 0.0)
+
+    def test_scroll_to_zoom_disabled_pans_canvas(self) -> None:
+        canvas = Canvas()
+        canvas.scroll_to_zoom = False
+        self.assertFalse(canvas.scroll_to_zoom)
         self.assertEqual((canvas.pan_x, canvas.pan_y), (0.0, 0.0))
 
         mock_ctrl = Mock()
@@ -83,7 +127,6 @@ class TestScrollZoom(unittest.TestCase):
 
         handled = canvas._on_scroll(mock_ctrl, 2.0, 3.0)
         self.assertTrue(handled)
-        # Pan delta is -dx * 20, -dy * 20
         self.assertEqual(canvas.pan_x, -40.0)
         self.assertEqual(canvas.pan_y, -60.0)
 

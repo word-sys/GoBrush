@@ -114,23 +114,74 @@ class TestKeyboardZoom(unittest.TestCase):
         handled = canvas._on_key_pressed(ctrl, Gdk.KEY_KP_9, 0, Gdk.ModifierType.CONTROL_MASK)
         self.assertTrue(handled)
 
-    def test_keyboard_shortcuts_rejected_without_ctrl(self) -> None:
+    def test_general_single_key_shortcuts(self) -> None:
         canvas = Canvas()
         ctrl = canvas._key_controller
 
+        # + without Ctrl zooms in
         handled = canvas._on_key_pressed(ctrl, Gdk.KEY_plus, 0, Gdk.ModifierType(0))
-        self.assertFalse(handled)
+        self.assertTrue(handled)
+        self.assertAlmostEqual(canvas.zoom, 1.25, places=5)
 
-        handled = canvas._on_key_pressed(ctrl, Gdk.KEY_0, 0, Gdk.ModifierType(0))
-        self.assertFalse(handled)
+        # - without Ctrl zooms out
+        handled = canvas._on_key_pressed(ctrl, Gdk.KEY_minus, 0, Gdk.ModifierType(0))
+        self.assertTrue(handled)
+        self.assertAlmostEqual(canvas.zoom, 1.0, places=5)
+
+        # 1 without Ctrl zooms to 100% (1:1)
+        canvas.zoom = 2.5
+        handled = canvas._on_key_pressed(ctrl, Gdk.KEY_1, 0, Gdk.ModifierType(0))
+        self.assertTrue(handled)
+        self.assertAlmostEqual(canvas.zoom, 1.0, places=5)
+
+        # f / F without Ctrl fits to window
+        handled = canvas._on_key_pressed(ctrl, Gdk.KEY_f, 0, Gdk.ModifierType(0))
+        self.assertTrue(handled)
+
+        handled = canvas._on_key_pressed(ctrl, Gdk.KEY_F, 0, Gdk.ModifierType(0))
+        self.assertTrue(handled)
+
+    def test_arrow_keys_navigation(self) -> None:
+        canvas = Canvas()
+        ctrl = canvas._key_controller
+        self.assertEqual((canvas.pan_x, canvas.pan_y), (0.0, 0.0))
+
+        # Left arrow pans image right (pan_x increases by 50)
+        handled = canvas._on_key_pressed(ctrl, Gdk.KEY_Left, 0, Gdk.ModifierType(0))
+        self.assertTrue(handled)
+        self.assertEqual(canvas.pan_x, 50.0)
+
+        # Right arrow pans image left (pan_x decreases by 50)
+        handled = canvas._on_key_pressed(ctrl, Gdk.KEY_Right, 0, Gdk.ModifierType(0))
+        self.assertTrue(handled)
+        self.assertEqual(canvas.pan_x, 0.0)
+
+        # Up arrow pans image down (pan_y increases by 50)
+        handled = canvas._on_key_pressed(ctrl, Gdk.KEY_Up, 0, Gdk.ModifierType(0))
+        self.assertTrue(handled)
+        self.assertEqual(canvas.pan_y, 50.0)
+
+        # Down arrow pans image up (pan_y decreases by 50)
+        handled = canvas._on_key_pressed(ctrl, Gdk.KEY_Down, 0, Gdk.ModifierType(0))
+        self.assertTrue(handled)
+        self.assertEqual(canvas.pan_y, 0.0)
+
+        # Shift + Arrow pans by 150px
+        handled = canvas._on_key_pressed(ctrl, Gdk.KEY_Left, 0, Gdk.ModifierType.SHIFT_MASK)
+        self.assertTrue(handled)
+        self.assertEqual(canvas.pan_x, 150.0)
+
+    def test_keyboard_shortcuts_rejected_keys(self) -> None:
+        canvas = Canvas()
+        ctrl = canvas._key_controller
 
         # Ctrl + Alt should be rejected (reserved for window manager)
         state = Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK
         handled = canvas._on_key_pressed(ctrl, Gdk.KEY_plus, 0, state)
         self.assertFalse(handled)
 
-        # Non-zoom key
-        handled = canvas._on_key_pressed(ctrl, Gdk.KEY_a, 0, Gdk.ModifierType.CONTROL_MASK)
+        # Non-zoom/non-arrow key
+        handled = canvas._on_key_pressed(ctrl, Gdk.KEY_a, 0, Gdk.ModifierType(0))
         self.assertFalse(handled)
 
     def test_canvas_view_delegation(self) -> None:
