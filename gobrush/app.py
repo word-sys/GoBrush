@@ -11,10 +11,11 @@ from gobrush.ui.window import MainWindow
 
 
 class GoBrushApp(Adw.Application):
-    def __init__(self) -> None:
+    def __init__(self, application_id: str | None = None, **kwargs) -> None:
         super().__init__(
-            application_id=__app_id__,
-            flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
+            application_id=application_id or __app_id__,
+            flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE | Gio.ApplicationFlags.HANDLES_OPEN,
+            **kwargs,
         )
         self.add_main_option(
             "version",
@@ -30,8 +31,32 @@ class GoBrushApp(Adw.Application):
         if options.contains("version"):
             print(f"GoBrush {__version__}")
             return 0
+
         self.activate()
+        win = self.props.active_window
+
+        args = command_line.get_arguments()
+        file_to_open: str | None = None
+        for arg in args[1:]:
+            if not arg.startswith("-"):
+                gfile = command_line.create_file_for_arg(arg)
+                path = gfile.get_path()
+                if path:
+                    file_to_open = path
+                    break
+
+        if file_to_open and isinstance(win, MainWindow):
+            win.open_file(file_to_open)
+
         return 0
+
+    def do_open(self, files: list[Gio.File], hint: str) -> None:
+        self.activate()
+        win = self.props.active_window
+        if files and isinstance(win, MainWindow):
+            path = files[0].get_path()
+            if path:
+                win.open_file(path)
 
     def do_activate(self) -> None:
         win = self.props.active_window

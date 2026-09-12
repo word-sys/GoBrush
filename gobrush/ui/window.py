@@ -279,6 +279,11 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_key_pressed(
         self, controller: Gtk.EventControllerKey, keyval: int, keycode: int, state: Gdk.ModifierType
     ) -> bool:
+        is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        if is_ctrl and keyval in (Gdk.KEY_o, Gdk.KEY_O):
+            self._on_open_action()
+            return True
+
         if not self.is_empty():
             return self.canvas.handle_key_pressed(keyval, state)
         return False
