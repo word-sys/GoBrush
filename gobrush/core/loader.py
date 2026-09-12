@@ -4,7 +4,16 @@ import io
 from pathlib import Path
 from typing import Union
 import cairo
+import warnings
 from PIL import Image, ImageOps, UnidentifiedImageError
+
+try:
+    import gi
+    gi.require_version("Rsvg", "2.0")
+    from gi.repository import Rsvg, GLib
+    _HAVE_RSVG = True
+except (ImportError, ValueError):
+    _HAVE_RSVG = False
 
 try:
     import numpy as np
@@ -31,6 +40,7 @@ SUPPORTED_FORMATS: frozenset[str] = frozenset(
         ".tif",
         ".ico",
         ".gif",
+        ".svg",
     }
 )
 
@@ -166,18 +176,131 @@ def cairo_surface_to_pil(surface: cairo.ImageSurface) -> Image.Image:
         return Image.frombytes("RGBA", (w, h), bytes(raw), "raw", "RGBA")
 
 
+def _is_svg_bytes(data: bytes) -> bool:
+    prefix = data[:1024].lstrip()
+    return (
+        prefix.startswith(b"<svg")
+        or (prefix.startswith(b"<?xml") and b"<svg" in prefix)
+        or (prefix.startswith(b"<!--") and b"<svg" in data[:2048])
+    )
+
+
+def _get_svg_dimensions(handle: Rsvg.Handle) -> tuple[int, int]:
+    if hasattr(handle, "get_intrinsic_size_in_pixels"):
+        try:
+            ok, w, h = handle.get_intrinsic_size_in_pixels()
+            if ok and w > 0 and h > 0:
+                return max(1, int(round(w))), max(1, int(round(h)))
+        except Exception:
+            pass
+    if hasattr(handle, "get_dimensions"):
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                dim = handle.get_dimensions()
+                if dim.width > 0 and dim.height > 0:
+                    return max(1, int(dim.width)), max(1, int(dim.height))
+        except Exception:
+            pass
+    return 800, 600
+
+
+def load_svg(
+    source: Union[str, Path, io.BytesIO, bytes],
+    scale: float = 1.0,
+    max_dim: int = 8192,
+) -> cairo.ImageSurface:
+    surface, _ = load_svg_with_info(source, scale=scale, max_dim=max_dim)
+    return surface
+
+
+def load_svg_with_info(
+    source: Union[str, Path, io.BytesIO, bytes],
+    scale: float = 1.0,
+    max_dim: int = 8192,
+) -> tuple[cairo.ImageSurface, bool]:
+    if not _HAVE_RSVG:
+        raise ImageLoadError("SVG format requires librsvg (Rsvg 2.0)")
+
+    if isinstance(source, (str, Path)):
+        p = Path(source).expanduser().resolve()
+        if not p.is_file():
+            raise ImageLoadError(f"File not found: {source}")
+        try:
+            raw_bytes = p.read_bytes()
+        except OSError as e:
+            raise ImageLoadError(f"Cannot read SVG file '{source}': {e}") from e
+    elif isinstance(source, (bytes, bytearray)):
+        raw_bytes = bytes(source)
+    elif hasattr(source, "read"):
+        try:
+            content = source.read()
+            raw_bytes = content.encode("utf-8") if isinstance(content, str) else bytes(content)
+        except Exception as e:
+            raise ImageLoadError(f"Cannot read SVG stream: {e}") from e
+    else:
+        raise ImageLoadError(f"Unsupported SVG source type: {type(source)}")
+
+    if not raw_bytes.strip():
+        raise ImageLoadError("Empty SVG content")
+
+    try:
+        handle = Rsvg.Handle.new_from_data(raw_bytes)
+    except Exception as e:
+        raise ImageLoadError(f"Failed to parse SVG: {e}") from e
+
+    orig_w, orig_h = _get_svg_dimensions(handle)
+    target_w = max(1, int(round(orig_w * scale)))
+    target_h = max(1, int(round(orig_h * scale)))
+
+    if target_w > max_dim or target_h > max_dim:
+        clamp_factor = min(max_dim / target_w, max_dim / target_h)
+        target_w = max(1, int(round(target_w * clamp_factor)))
+        target_h = max(1, int(round(target_h * clamp_factor)))
+
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, target_w, target_h)
+    cr = cairo.Context(surface)
+
+    if hasattr(Rsvg, "Rectangle") and hasattr(handle, "render_document"):
+        rect = Rsvg.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = 0, 0, target_w, target_h
+        handle.render_document(cr, rect)
+    else:
+        scale_x = target_w / orig_w
+        scale_y = target_h / orig_h
+        if scale_x != 1.0 or scale_y != 1.0:
+            cr.scale(scale_x, scale_y)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            handle.render_cairo(cr)
+
+    data = surface.get_data()
+    if _HAVE_NUMPY:
+        has_alpha = bool(np.any(np.frombuffer(data, dtype=np.uint8)[3::4] != 255))
+    else:
+        has_alpha = False
+        for i in range(3, len(data), 4):
+            if data[i] != 255:
+                has_alpha = True
+                break
+
+    return surface, has_alpha
+
+
 def load_image(source: Union[str, Path, io.BytesIO, bytes]) -> cairo.ImageSurface:
     surface, _ = load_image_with_info(source)
     return surface
 
 
 def load_image_with_info(
-    source: Union[str, Path, io.BytesIO, bytes],
+    source: Union[str, Path, io.BytesIO, bytes, Image.Image],
 ) -> tuple[cairo.ImageSurface, bool]:
     if isinstance(source, (str, Path)):
         p = Path(source).expanduser().resolve()
         if not p.is_file():
             raise ImageLoadError(f"File not found: {source}")
+        if p.suffix.lower() == ".svg":
+            return load_svg_with_info(p)
         try:
             with Image.open(p) as im:
                 return pil_to_cairo_surface_with_info(im)
@@ -185,15 +308,24 @@ def load_image_with_info(
             raise ImageLoadError(f"Cannot read image file '{source}': {e}") from e
 
     elif isinstance(source, (bytes, bytearray)):
+        b = bytes(source)
+        if _is_svg_bytes(b):
+            return load_svg_with_info(b)
         try:
-            with Image.open(io.BytesIO(source)) as im:
+            with Image.open(io.BytesIO(b)) as im:
                 return pil_to_cairo_surface_with_info(im)
         except (UnidentifiedImageError, OSError, ValueError) as e:
             raise ImageLoadError(f"Cannot decode image bytes: {e}") from e
 
     elif hasattr(source, "read"):
+        if getattr(source, "name", "").lower().endswith(".svg"):
+            return load_svg_with_info(source)
         try:
-            with Image.open(source) as im:
+            content = source.read()
+            b = content.encode("utf-8") if isinstance(content, str) else bytes(content)
+            if _is_svg_bytes(b):
+                return load_svg_with_info(b)
+            with Image.open(io.BytesIO(b)) as im:
                 return pil_to_cairo_surface_with_info(im)
         except (UnidentifiedImageError, OSError, ValueError) as e:
             raise ImageLoadError(f"Cannot decode image stream: {e}") from e
