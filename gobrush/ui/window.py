@@ -1,7 +1,9 @@
+from __future__ import annotations
 import os
 import urllib.parse
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+import cairo
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -72,6 +74,10 @@ class MainWindow(Adw.ApplicationWindow):
         self._action_scroll_to_zoom.connect("change-state", self._on_scroll_to_zoom_changed)
         self.add_action(self._action_scroll_to_zoom)
 
+        self._action_paste = Gio.SimpleAction.new("paste-clipboard", None)
+        self._action_paste.connect("activate", lambda *_: self.paste_from_clipboard())
+        self.add_action(self._action_paste)
+
     def _on_scroll_to_zoom_changed(self, action: Gio.SimpleAction, value: GLib.Variant) -> None:
         action.set_state(value)
         self.canvas.scroll_to_zoom = value.get_boolean()
@@ -115,7 +121,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _build_menu(self) -> None:
         menu = Gio.Menu()
-        menu.append("Paste from Clipboard", "app.paste-clipboard")
+        menu.append("Paste from Clipboard", "win.paste-clipboard")
         menu.append("Zoom on Scroll", "win.scroll-to-zoom")
         menu.append("Keyboard Shortcuts", "app.shortcuts")
         menu.append("About GoBrush", "app.about")
@@ -140,7 +146,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.btn_redo.set_sensitive(sensitive)
 
     def show_toast(self, title: str, timeout: int = 2) -> Adw.Toast:
-        toast = Adw.Toast.new(title)
+        escaped_title = GLib.markup_escape_text(str(title))
+        toast = Adw.Toast.new(escaped_title)
         toast.set_timeout(timeout)
         self.toast_overlay.add_toast(toast)
         return toast
@@ -148,7 +155,8 @@ class MainWindow(Adw.ApplicationWindow):
     def show_toast_with_action(
         self, title: str, button_label: str, action_name: str, timeout: int = 5
     ) -> Adw.Toast:
-        toast = Adw.Toast.new(title)
+        escaped_title = GLib.markup_escape_text(str(title))
+        toast = Adw.Toast.new(escaped_title)
         toast.set_button_label(button_label)
         toast.set_action_name(action_name)
         toast.set_timeout(timeout)
@@ -184,6 +192,106 @@ class MainWindow(Adw.ApplicationWindow):
     def action_scroll_to_zoom(self) -> Gio.SimpleAction:
         return self._action_scroll_to_zoom
 
+    @property
+    def action_paste(self) -> Gio.SimpleAction:
+        return self._action_paste
+
+    def load_surface(
+        self,
+        surface: cairo.ImageSurface,
+        has_alpha: bool = True,
+        title: str = "Pasted Image - GoBrush",
+        file_path: str | None = None,
+    ) -> None:
+        self.canvas.set_image_surface(
+            surface,
+            surface.get_width(),
+            surface.get_height(),
+            has_alpha=has_alpha,
+        )
+        self.show_canvas()
+        self.canvas.zoom_fit()
+        self._current_file_path = file_path
+        self.set_title(title)
+
+    def load_pasted_image(self, source: Any) -> bool:
+        try:
+            surface, has_alpha = load_image_with_info(source)
+        except ImageLoadError as e:
+            self.show_toast(f"Failed to paste image: {e}")
+            return False
+        except Exception as e:
+            self.show_toast(f"Error pasting image: {e}")
+            return False
+
+        self.load_surface(surface, has_alpha=has_alpha, title="Pasted Image - GoBrush", file_path=None)
+        self.show_toast("Image pasted from clipboard")
+        return True
+
+    def paste_from_clipboard(
+        self,
+        clipboard: Gdk.Clipboard | None = None,
+        callback: Callable[[bool], None] | None = None,
+    ) -> None:
+        try:
+            cb = clipboard if clipboard is not None else self.get_clipboard()
+        except Exception:
+            cb = None
+
+        if cb is None:
+            self.show_toast("No clipboard available")
+            if callback:
+                callback(False)
+            return
+
+        def _on_texture_read(source: Gdk.Clipboard, result: Gio.AsyncResult) -> None:
+            texture = None
+            try:
+                texture = source.read_texture_finish(result)
+            except Exception:
+                pass
+
+            if texture is not None:
+                ok = self.load_pasted_image(texture)
+                if callback:
+                    callback(ok)
+                return
+
+            def _on_text_read(text_source: Gdk.Clipboard, text_result: Gio.AsyncResult) -> None:
+                text = None
+                try:
+                    text = text_source.read_text_finish(text_result)
+                except Exception:
+                    pass
+
+                if text:
+                    paths = self._extract_paths_from_drop_value(text)
+                    for p in paths:
+                        if is_supported_image(p):
+                            if self.open_file(p):
+                                self.show_toast("Image pasted from clipboard")
+                                if callback:
+                                    callback(True)
+                                return
+
+                self.show_toast("No image found in clipboard")
+                if callback:
+                    callback(False)
+
+            try:
+                source.read_text_async(None, _on_text_read)
+            except Exception:
+                self.show_toast("No image found in clipboard")
+                if callback:
+                    callback(False)
+
+        try:
+            cb.read_texture_async(None, _on_texture_read)
+        except Exception:
+            self.show_toast("No image found in clipboard")
+            if callback:
+                callback(False)
+
     def open_file(self, path: str | Path) -> bool:
         p = Path(path).expanduser().resolve()
         if not p.is_file():
@@ -203,16 +311,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.show_toast(f"Error opening image: {e}")
             return False
 
-        self.canvas.set_image_surface(
-            surface,
-            surface.get_width(),
-            surface.get_height(),
-            has_alpha=has_alpha,
-        )
-        self.show_canvas()
-        self.canvas.zoom_fit()
-        self._current_file_path = str(p)
-        self.set_title(f"{p.name} - GoBrush")
+        self.load_surface(surface, has_alpha=has_alpha, title=f"{p.name} - GoBrush", file_path=str(p))
         return True
 
     def close_file(self) -> None:
@@ -293,14 +392,18 @@ class MainWindow(Adw.ApplicationWindow):
             self.open_file(path)
 
     def _on_paste_action(self) -> None:
-        self.show_toast("Clipboard paste ready")
+        self.paste_from_clipboard()
 
     def _on_key_pressed(
         self, controller: Gtk.EventControllerKey, keyval: int, keycode: int, state: Gdk.ModifierType
     ) -> bool:
-        is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK) and not bool(state & Gdk.ModifierType.ALT_MASK)
         if is_ctrl and keyval in (Gdk.KEY_o, Gdk.KEY_O):
             self._on_open_action()
+            return True
+
+        if is_ctrl and keyval in (Gdk.KEY_v, Gdk.KEY_V):
+            self.paste_from_clipboard()
             return True
 
         if not self.is_empty():

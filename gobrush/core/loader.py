@@ -338,5 +338,20 @@ def load_image_with_info(
         except Exception as e:
             raise ImageLoadError(f"Cannot convert image: {e}") from e
 
+    elif hasattr(source, "save_to_png_bytes"):
+        try:
+            gbytes = source.save_to_png_bytes()
+            return load_image_with_info(gbytes.get_data())
+        except Exception as e:
+            raise ImageLoadError(f"Cannot load texture image: {e}") from e
+
     raise ImageLoadError(f"Unsupported image source type: {type(source)}")
+
+
+def load_image_from_texture(texture: Any) -> tuple[cairo.ImageSurface, bool]:
+    if not hasattr(texture, "save_to_png_bytes"):
+        raise ImageLoadError(f"Object does not support texture export: {type(texture)}")
+    gbytes = texture.save_to_png_bytes()
+    return load_image_with_info(gbytes.get_data())
+
 
