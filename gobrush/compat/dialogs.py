@@ -39,11 +39,46 @@ def _build_image_filters() -> list[Gtk.FileFilter]:
     svg_filter.add_pattern("*.svg")
     svg_filter.add_pattern("*.SVG")
 
+    bmp_filter = Gtk.FileFilter()
+    bmp_filter.set_name("BMP Image (*.bmp, *.dib)")
+    bmp_filter.add_pattern("*.bmp")
+    bmp_filter.add_pattern("*.dib")
+    bmp_filter.add_pattern("*.BMP")
+    bmp_filter.add_pattern("*.DIB")
+
+    tiff_filter = Gtk.FileFilter()
+    tiff_filter.set_name("TIFF Image (*.tiff, *.tif)")
+    tiff_filter.add_pattern("*.tiff")
+    tiff_filter.add_pattern("*.tif")
+    tiff_filter.add_pattern("*.TIFF")
+    tiff_filter.add_pattern("*.TIF")
+
+    ico_filter = Gtk.FileFilter()
+    ico_filter.set_name("ICO Icon (*.ico)")
+    ico_filter.add_pattern("*.ico")
+    ico_filter.add_pattern("*.ICO")
+
+    gif_filter = Gtk.FileFilter()
+    gif_filter.set_name("GIF Image (*.gif)")
+    gif_filter.add_pattern("*.gif")
+    gif_filter.add_pattern("*.GIF")
+
     all_files = Gtk.FileFilter()
     all_files.set_name("All Files (*.*)")
     all_files.add_pattern("*")
 
-    return [all_supported, png_filter, jpg_filter, webp_filter, svg_filter, all_files]
+    return [
+        all_supported,
+        png_filter,
+        jpg_filter,
+        webp_filter,
+        bmp_filter,
+        tiff_filter,
+        ico_filter,
+        gif_filter,
+        svg_filter,
+        all_files,
+    ]
 
 
 def open_file_dialog(

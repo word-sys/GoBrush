@@ -18,7 +18,20 @@ class ImageLoadError(Exception):
 
 
 SUPPORTED_FORMATS: frozenset[str] = frozenset(
-    {".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".webp"}
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".jpe",
+        ".jfif",
+        ".webp",
+        ".bmp",
+        ".dib",
+        ".tiff",
+        ".tif",
+        ".ico",
+        ".gif",
+    }
 )
 
 
@@ -33,12 +46,39 @@ def pil_to_cairo_surface(im: Image.Image) -> cairo.ImageSurface:
 
 
 def pil_to_cairo_surface_with_info(im: Image.Image) -> tuple[cairo.ImageSurface, bool]:
+    w, h = getattr(im, "size", (0, 0))
+    if w <= 0 or h <= 0:
+        raise ImageLoadError(f"Image has invalid dimensions: {w}x{h}")
+
+    # Handle multi-frame formats (animated GIF, multi-page TIFF) by reading first frame
+    if getattr(im, "n_frames", 1) > 1:
+        try:
+            im.seek(0)
+        except (EOFError, OSError):
+            pass
+
+    # For multi-resolution ICO files, pick highest-resolution icon
+    if hasattr(im, "ico") and hasattr(im.ico, "sizes"):
+        try:
+            sizes = sorted(im.ico.sizes(), key=lambda s: s[0] * s[1])
+            if sizes:
+                im = im.ico.getimage(sizes[-1])
+        except Exception:
+            pass
+
     # Handle EXIF orientation tag if present
-    im = ImageOps.exif_transpose(im)
+    try:
+        im = ImageOps.exif_transpose(im)
+    except Exception:
+        pass
+
     if im.mode != "RGBA":
         im = im.convert("RGBA")
 
     w, h = im.size
+    if w <= 0 or h <= 0:
+        raise ImageLoadError(f"Image has invalid dimensions: {w}x{h}")
+
     # Check if image is fully opaque
     extrema = im.getextrema()
     is_opaque = len(extrema) >= 4 and extrema[3][0] == 255
@@ -157,6 +197,14 @@ def load_image_with_info(
                 return pil_to_cairo_surface_with_info(im)
         except (UnidentifiedImageError, OSError, ValueError) as e:
             raise ImageLoadError(f"Cannot decode image stream: {e}") from e
+
+    elif isinstance(source, Image.Image):
+        try:
+            return pil_to_cairo_surface_with_info(source)
+        except ImageLoadError:
+            raise
+        except Exception as e:
+            raise ImageLoadError(f"Cannot convert image: {e}") from e
 
     raise ImageLoadError(f"Unsupported image source type: {type(source)}")
 
