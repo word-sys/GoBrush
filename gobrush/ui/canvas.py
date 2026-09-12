@@ -23,12 +23,12 @@ class Canvas(Gtk.DrawingArea):
         self._image_height: int = 0
         self._viewport_width: int = 0
         self._viewport_height: int = 0
+        self._pending_fit: bool = True
 
         self.transform = ViewportTransform()
         self._image_draw_hooks: list[Callable[[cairo.Context], None]] = []
         self._draw_hooks: list[Callable[[cairo.Context, int, int], None]] = []
 
-        # Transparency checkerboard & HiDPI support
         self._show_checkerboard: bool = True
         self._checkerboard_tile_size: int = 10
         self._checkerboard_pattern: cairo.SurfacePattern | None = None
@@ -39,7 +39,6 @@ class Canvas(Gtk.DrawingArea):
         self._view_changed_callbacks: list[Callable[[], None]] = []
         self._anim_tick_id: int | None = None
 
-        # Drag panning state
         self._is_panning: bool = False
         self._is_space_panning: bool = False
         self._space_pressed: bool = False
@@ -47,26 +46,17 @@ class Canvas(Gtk.DrawingArea):
         self._tool_cursor_name: str | None = None
         self._drag_to_pan: bool = True
 
-        # Scroll navigation state (General navigation: scroll-to-zoom default)
         self._scroll_to_zoom: bool = True
         self._last_scroll_was_pan: bool = True
 
-        # Trackpad and touchscreen pinch-to-zoom state
         self._is_pinching: bool = False
         self._last_gesture_scale: float = 1.0
 
-        # Cursor tracking and event controllers
         self._cursor_pos: tuple[float, float] | None = None
         self._motion_controller = Gtk.EventControllerMotion()
         self._motion_controller.connect("motion", self._on_motion_internal)
         self._motion_controller.connect("leave", self._on_leave_internal)
         self.add_controller(self._motion_controller)
-
-        # Double-click gesture to toggle Fit to Window <-> 100%
-        self._click_gesture = Gtk.GestureClick()
-        self._click_gesture.set_button(Gdk.BUTTON_PRIMARY)
-        self._click_gesture.connect("pressed", self._on_click_pressed)
-        self.add_controller(self._click_gesture)
 
         self._scroll_controller = Gtk.EventControllerScroll.new(
             Gtk.EventControllerScrollFlags.BOTH_AXES | Gtk.EventControllerScrollFlags.KINETIC
@@ -75,7 +65,6 @@ class Canvas(Gtk.DrawingArea):
         self._scroll_controller.connect("decelerate", self._on_scroll_decelerate)
         self.add_controller(self._scroll_controller)
 
-        # Pinch-to-zoom gesture (touchpad and touchscreen)
         self._zoom_gesture = Gtk.GestureZoom()
         self._zoom_gesture.connect("begin", self._on_zoom_gesture_begin)
         self._zoom_gesture.connect("scale-changed", self._on_zoom_gesture_scale_changed)
@@ -83,7 +72,6 @@ class Canvas(Gtk.DrawingArea):
         self._zoom_gesture.connect("cancel", self._on_zoom_gesture_cancel)
         self.add_controller(self._zoom_gesture)
 
-        # Middle-click drag panning
         self._middle_drag = Gtk.GestureDrag()
         self._middle_drag.set_button(Gdk.BUTTON_MIDDLE)
         self._middle_drag.connect("drag-begin", self._on_middle_drag_begin)
@@ -92,7 +80,6 @@ class Canvas(Gtk.DrawingArea):
         self._middle_drag.connect("cancel", self._on_middle_drag_cancel)
         self.add_controller(self._middle_drag)
 
-        # Primary (left-click) drag: spacebar pan or tool interactions
         self._primary_drag = Gtk.GestureDrag()
         self._primary_drag.set_button(Gdk.BUTTON_PRIMARY)
         self._primary_drag.connect("drag-begin", self._on_primary_drag_begin)
@@ -337,24 +324,28 @@ class Canvas(Gtk.DrawingArea):
         self._anim_tick_id = self.add_tick_callback(_tick_callback)
 
     def set_zoom(self, zoom: float, pivot: tuple[float, float] | None = None) -> None:
+        self._pending_fit = False
         self._cancel_animation()
         self.transform.set_zoom(zoom, pivot)
         self.queue_draw()
         self._notify_view_changed()
 
     def zoom_by(self, factor: float, pivot: tuple[float, float] | None = None) -> None:
+        self._pending_fit = False
         self._cancel_animation()
         self.transform.zoom_by(factor, pivot)
         self.queue_draw()
         self._notify_view_changed()
 
     def set_pan(self, pan_x: float, pan_y: float) -> None:
+        self._pending_fit = False
         self._cancel_animation()
         self.transform.set_pan(pan_x, pan_y)
         self.queue_draw()
         self._notify_view_changed()
 
     def pan_by(self, dx: float, dy: float) -> None:
+        self._pending_fit = False
         self._cancel_animation()
         self.transform.pan_by(dx, dy)
         self.queue_draw()
@@ -403,9 +394,16 @@ class Canvas(Gtk.DrawingArea):
             self.reset_view()
             return
 
+        vw = viewport_width if viewport_width is not None else self.viewport_width
+        vh = viewport_height if viewport_height is not None else self.viewport_height
+        if vw <= 0 or vh <= 0:
+            self._pending_fit = True
+            return
+
+        self._pending_fit = False
         target_zoom, target_pan_x, target_pan_y = self.get_fit_target(
-            viewport_width=viewport_width,
-            viewport_height=viewport_height,
+            viewport_width=vw,
+            viewport_height=vh,
             padding=padding,
             upscale=upscale,
         )
@@ -419,19 +417,22 @@ class Canvas(Gtk.DrawingArea):
             self.queue_draw()
             self._notify_view_changed()
 
-    def zoom_actual_size(
+    def set_zoom_level(
         self,
+        zoom: float,
         viewport_width: int | None = None,
         viewport_height: int | None = None,
-        animate: bool = True,
+        animate: bool = False,
     ) -> None:
         if not self.has_image:
-            self.set_zoom(1.0)
+            self.set_zoom(zoom)
             return
 
+        self._pending_fit = False
+        target_zoom = self.transform.clamp_zoom(zoom)
         vw = viewport_width if viewport_width is not None else self.viewport_width
         vh = viewport_height if viewport_height is not None else self.viewport_height
-        target_zoom = 1.0
+
         if vw > 0 and vh > 0:
             target_pan_x = (vw - self._image_width * target_zoom) / 2.0
             target_pan_y = (vh - self._image_height * target_zoom) / 2.0
@@ -449,45 +450,18 @@ class Canvas(Gtk.DrawingArea):
             self.queue_draw()
             self._notify_view_changed()
 
-    def toggle_zoom_fit_actual(
+    def zoom_actual_size(
         self,
-        pivot: tuple[float, float] | None = None,
         viewport_width: int | None = None,
         viewport_height: int | None = None,
         animate: bool = True,
     ) -> None:
-        if not self.has_image:
-            return
-
-        vw = viewport_width if viewport_width is not None else self.viewport_width
-        vh = viewport_height if viewport_height is not None else self.viewport_height
-
-        fit_zoom, _, _ = self.get_fit_target(viewport_width=vw, viewport_height=vh)
-        if abs(self.zoom - fit_zoom) < 0.05 and abs(fit_zoom - 1.0) >= 0.01:
-            target_zoom = 1.0
-            if pivot is not None and vw > 0 and vh > 0:
-                px, py = pivot
-                ix, iy = self.screen_to_image(px, py)
-                target_pan_x = px - ix * target_zoom
-                target_pan_y = py - iy * target_zoom
-            elif vw > 0 and vh > 0:
-                target_pan_x = (vw - self._image_width * target_zoom) / 2.0
-                target_pan_y = (vh - self._image_height * target_zoom) / 2.0
-            else:
-                target_pan_x = self.pan_x
-                target_pan_y = self.pan_y
-
-            if animate and self.get_mapped():
-                self.animate_to(target_zoom, target_pan_x, target_pan_y)
-            else:
-                self._cancel_animation()
-                self.transform.zoom = target_zoom
-                self.transform.pan_x = target_pan_x
-                self.transform.pan_y = target_pan_y
-                self.queue_draw()
-                self._notify_view_changed()
-        else:
-            self.zoom_fit(viewport_width=vw, viewport_height=vh, animate=animate)
+        self.set_zoom_level(
+            1.0,
+            viewport_width=viewport_width,
+            viewport_height=viewport_height,
+            animate=animate,
+        )
 
     def zoom_in(self, factor: float = 1.25, pivot: tuple[float, float] | None = None) -> None:
         if pivot is None:
@@ -550,11 +524,23 @@ class Canvas(Gtk.DrawingArea):
                 self._image_has_alpha = bool(has_alpha)
             else:
                 self._image_has_alpha = surface.get_format() == cairo.FORMAT_ARGB32
+
+            vw = self.viewport_width
+            vh = self.viewport_height
+            if vw > 0 and vh > 0:
+                target_zoom, target_pan_x, target_pan_y = self.get_fit_target(vw, vh)
+                self.transform.zoom = target_zoom
+                self.transform.pan_x = target_pan_x
+                self.transform.pan_y = target_pan_y
+                self._pending_fit = False
+            else:
+                self._pending_fit = True
         else:
             self._image_width = 0
             self._image_height = 0
             self._image_has_alpha = True
             self.transform.reset()
+            self._pending_fit = True
         self.queue_draw()
         self._notify_view_changed()
 
@@ -601,13 +587,19 @@ class Canvas(Gtk.DrawingArea):
         self._viewport_width = width
         self._viewport_height = height
 
-        # Clear viewport background
+        if self._pending_fit and self.has_image and width > 0 and height > 0:
+            target_zoom, target_pan_x, target_pan_y = self.get_fit_target(width, height)
+            self.transform.zoom = target_zoom
+            self.transform.pan_x = target_pan_x
+            self.transform.pan_y = target_pan_y
+            self._pending_fit = False
+            self._notify_view_changed()
+
         cr.save()
         cr.set_source_rgba(*self._background_color)
         cr.paint()
         cr.restore()
 
-        # Render transformed image and image-space layers
         cr.save()
         self.transform.apply_to_cairo(cr)
         if self._image_surface is not None:
@@ -615,7 +607,6 @@ class Canvas(Gtk.DrawingArea):
             if vis_rect is not None:
                 vx, vy, vw, vh = vis_rect
 
-                # Render checkerboard behind transparent image pixels only within visible rect
                 if self._show_checkerboard and self._image_has_alpha:
                     cr.save()
                     pattern = self._get_checkerboard_pattern()
@@ -627,12 +618,10 @@ class Canvas(Gtk.DrawingArea):
                     cr.fill()
                     cr.restore()
 
-                # Clip to visible viewport rectangle to eliminate overdraw on large surfaces
                 cr.save()
                 cr.rectangle(vx, vy, vw, vh)
                 cr.clip()
 
-                # Render image surface with adaptive sampling filter
                 cr.set_source_surface(self._image_surface, 0, 0)
                 pattern = cr.get_source()
                 if pattern is not None:
@@ -640,7 +629,6 @@ class Canvas(Gtk.DrawingArea):
                 cr.paint()
                 cr.restore()
 
-                # Draw subtle image boundary outline
                 cr.save()
                 cr.set_line_width(1.0 / self.zoom)
                 cr.set_source_rgba(0.0, 0.0, 0.0, 0.25)
@@ -654,7 +642,6 @@ class Canvas(Gtk.DrawingArea):
             cr.restore()
         cr.restore()
 
-        # Render screen-space overlays
         for hook in self._draw_hooks:
             cr.save()
             hook(cr, width, height)
@@ -671,12 +658,6 @@ class Canvas(Gtk.DrawingArea):
 
     def _on_leave_internal(self, controller: Gtk.EventControllerMotion) -> None:
         self._cursor_pos = None
-
-    def _on_click_pressed(
-        self, gesture: Gtk.GestureClick, n_press: int, x: float, y: float
-    ) -> None:
-        if n_press == 2 and self.has_image:
-            self.toggle_zoom_fit_actual(pivot=(x, y))
 
     def _on_scroll(
         self, controller: Gtk.EventControllerScroll, dx: float, dy: float
@@ -779,7 +760,6 @@ class Canvas(Gtk.DrawingArea):
                 self.zoom_fit()
                 return True
         else:
-            # Direct general navigation shortcuts (no Ctrl modifier)
             if keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
                 self.zoom_in()
                 return True
@@ -812,6 +792,7 @@ class Canvas(Gtk.DrawingArea):
     def _on_middle_drag_begin(
         self, gesture: Gtk.GestureDrag, start_x: float, start_y: float
     ) -> None:
+        self._pending_fit = False
         self.grab_focus()
         self._cancel_animation()
         self._is_panning = True
@@ -844,6 +825,7 @@ class Canvas(Gtk.DrawingArea):
     ) -> None:
         self.grab_focus()
         if self._space_pressed or (self._drag_to_pan and self._tool_cursor_name is None):
+            self._pending_fit = False
             self._cancel_animation()
             self._is_space_panning = True
             self._drag_start_pan = (self.transform.pan_x, self.transform.pan_y)

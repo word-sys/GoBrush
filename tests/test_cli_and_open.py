@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 from PIL import Image
+import cairo
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -123,6 +124,22 @@ class TestCliAndOpen(unittest.TestCase):
         self.assertFalse(win.is_empty())
         self.assertEqual(win.canvas.image_width, 64)
         self.assertEqual(win.canvas.image_height, 48)
+
+    def test_opened_file_centers_in_middle_of_window(self) -> None:
+        win = MainWindow()
+        win.open_file(self.image_path)
+        self.assertTrue(win.canvas._pending_fit)
+
+        # Draw at 800x600
+        target = cairo.ImageSurface(cairo.FORMAT_ARGB32, 800, 600)
+        cr = cairo.Context(target)
+        win.canvas._on_draw(win.canvas, cr, 800, 600)
+
+        self.assertFalse(win.canvas._pending_fit)
+        # 64x48 image in 800x600 viewport -> zoom 1.0, pan_x = (800-64)/2 = 368, pan_y = (600-48)/2 = 276
+        self.assertAlmostEqual(win.canvas.zoom, 1.0)
+        self.assertAlmostEqual(win.canvas.pan_x, 368.0)
+        self.assertAlmostEqual(win.canvas.pan_y, 276.0)
 
 
 if __name__ == "__main__":

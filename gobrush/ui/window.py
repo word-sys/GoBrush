@@ -80,7 +80,27 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_scroll_to_zoom_changed(self, action: Gio.SimpleAction, value: GLib.Variant) -> None:
         action.set_state(value)
-        self.canvas.scroll_to_zoom = value.get_boolean()
+        is_active = value.get_boolean()
+        self.canvas.scroll_to_zoom = is_active
+        if hasattr(self, "switch_scroll_zoom") and self.switch_scroll_zoom.get_active() != is_active:
+            self.switch_scroll_zoom.set_active(is_active)
+
+    def _on_switch_scroll_zoom_active(self, switch: Gtk.Switch, _pspec: Any) -> None:
+        is_active = switch.get_active()
+        self.canvas.scroll_to_zoom = is_active
+        if hasattr(self, "_action_scroll_to_zoom"):
+            self._action_scroll_to_zoom.set_state(GLib.Variant.new_boolean(is_active))
+
+    def _activate_action(self, full_name: str) -> None:
+        app = self.get_application()
+        if full_name.startswith("app.") and app:
+            action = app.lookup_action(full_name[4:])
+            if action:
+                action.activate(None)
+        elif full_name.startswith("win."):
+            action = self.lookup_action(full_name[4:])
+            if action:
+                action.activate(None)
 
     def _build_header_actions(self) -> None:
         self.btn_open = Gtk.Button(
@@ -120,24 +140,137 @@ class MainWindow(Adw.ApplicationWindow):
         self.header_bar.pack_end(self.btn_copy)
 
     def _build_menu(self) -> None:
-        menu = Gio.Menu()
-        menu.append("Paste from Clipboard", "win.paste-clipboard")
-        menu.append("Zoom on Scroll", "win.scroll-to-zoom")
-        menu.append("Keyboard Shortcuts", "app.shortcuts")
-        menu.append("About GoBrush", "app.about")
+        self.menu_popover = Gtk.Popover()
+        self.menu_popover.add_css_class("menu-popover")
+
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        vbox.set_margin_top(10)
+        vbox.set_margin_bottom(10)
+        vbox.set_margin_start(10)
+        vbox.set_margin_end(10)
+
+        lbl_zoom = Gtk.Label(label="Zoom", xalign=0.0)
+        lbl_zoom.add_css_class("dim-label")
+        vbox.append(lbl_zoom)
+
+        quick_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        quick_box.add_css_class("linked")
+        quick_box.set_homogeneous(True)
+
+        self.btn_zoom_out = Gtk.Button(label="−", tooltip_text="Zoom Out (-)")
+        self.btn_zoom_out.connect("clicked", lambda _: self.canvas.zoom_out())
+        quick_box.append(self.btn_zoom_out)
+
+        self.btn_zoom_fit = Gtk.Button(label="Fit", tooltip_text="Fit to Window (F)")
+        self.btn_zoom_fit.connect("clicked", lambda _: (self.canvas.zoom_fit(), self.menu_popover.popdown()))
+        quick_box.append(self.btn_zoom_fit)
+
+        self.btn_zoom_100 = Gtk.Button(label="100%", tooltip_text="Actual Size 100% (1)")
+        self.btn_zoom_100.connect("clicked", lambda _: (self.canvas.set_zoom_level(1.0), self.menu_popover.popdown()))
+        quick_box.append(self.btn_zoom_100)
+
+        self.btn_zoom_in = Gtk.Button(label="+", tooltip_text="Zoom In (+)")
+        self.btn_zoom_in.connect("clicked", lambda _: self.canvas.zoom_in())
+        quick_box.append(self.btn_zoom_in)
+
+        vbox.append(quick_box)
+
+        presets_grid = Gtk.Grid()
+        presets_grid.set_column_spacing(6)
+        presets_grid.set_row_spacing(6)
+        presets_grid.set_column_homogeneous(True)
+
+        self.preset_buttons: dict[int, Gtk.Button] = {}
+        presets = [
+            (25, 0.25, 0, 0),
+            (50, 0.50, 1, 0),
+            (75, 0.75, 2, 0),
+            (100, 1.00, 0, 1),
+            (150, 1.50, 1, 1),
+            (200, 2.00, 2, 1),
+        ]
+        for pct, val, col, row in presets:
+            btn = Gtk.Button(label=f"{pct}%", tooltip_text=f"Zoom to {pct}%")
+            btn.add_css_class("flat")
+            btn.connect(
+                "clicked",
+                lambda _, z=val: (self.canvas.set_zoom_level(z), self.menu_popover.popdown()),
+            )
+            presets_grid.attach(btn, col, row, 1, 1)
+            self.preset_buttons[pct] = btn
+
+        vbox.append(presets_grid)
+        vbox.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        self.btn_menu_paste = Gtk.Button()
+        self.btn_menu_paste.add_css_class("flat")
+        paste_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        paste_box.append(Gtk.Image.new_from_icon_name("edit-paste-symbolic"))
+        lbl_paste = Gtk.Label(label="Paste from Clipboard", xalign=0.0, hexpand=True)
+        paste_box.append(lbl_paste)
+        lbl_paste_accel = Gtk.Label(label="Ctrl+V")
+        lbl_paste_accel.add_css_class("dim-label")
+        paste_box.append(lbl_paste_accel)
+        self.btn_menu_paste.set_child(paste_box)
+        self.btn_menu_paste.connect(
+            "clicked",
+            lambda _: (self.paste_from_clipboard(), self.menu_popover.popdown()),
+        )
+        vbox.append(self.btn_menu_paste)
+
+        scroll_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        lbl_scroll = Gtk.Label(label="Zoom on Scroll", xalign=0.0, hexpand=True)
+        scroll_box.append(lbl_scroll)
+        self.switch_scroll_zoom = Gtk.Switch()
+        self.switch_scroll_zoom.set_valign(Gtk.Align.CENTER)
+        self.switch_scroll_zoom.set_active(self.canvas.scroll_to_zoom)
+        self.switch_scroll_zoom.connect("notify::active", self._on_switch_scroll_zoom_active)
+        scroll_box.append(self.switch_scroll_zoom)
+        vbox.append(scroll_box)
+
+        vbox.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        self.btn_menu_shortcuts = Gtk.Button()
+        self.btn_menu_shortcuts.add_css_class("flat")
+        box_shortcuts = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        box_shortcuts.append(Gtk.Label(label="Keyboard Shortcuts", xalign=0.0, hexpand=True))
+        self.btn_menu_shortcuts.set_child(box_shortcuts)
+        self.btn_menu_shortcuts.connect(
+            "clicked",
+            lambda _: (self._activate_action("app.shortcuts"), self.menu_popover.popdown()),
+        )
+        vbox.append(self.btn_menu_shortcuts)
+
+        self.btn_menu_about = Gtk.Button()
+        self.btn_menu_about.add_css_class("flat")
+        box_about = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        box_about.append(Gtk.Label(label="About GoBrush", xalign=0.0, hexpand=True))
+        self.btn_menu_about.set_child(box_about)
+        self.btn_menu_about.connect(
+            "clicked",
+            lambda _: (self._activate_action("app.about"), self.menu_popover.popdown()),
+        )
+        vbox.append(self.btn_menu_about)
+
+        self.menu_popover.set_child(vbox)
 
         self.menu_btn = Gtk.MenuButton(
             icon_name="open-menu-symbolic",
             tooltip_text="Main Menu",
-            menu_model=menu,
+            popover=self.menu_popover,
         )
         self.header_bar.pack_end(self.menu_btn)
-
-
 
     def set_has_image(self, has_image: bool) -> None:
         self.btn_copy.set_sensitive(has_image)
         self.btn_save.set_sensitive(has_image)
+        if hasattr(self, "btn_zoom_fit"):
+            self.btn_zoom_fit.set_sensitive(has_image)
+            self.btn_zoom_100.set_sensitive(has_image)
+            self.btn_zoom_in.set_sensitive(has_image)
+            self.btn_zoom_out.set_sensitive(has_image)
+            for btn in self.preset_buttons.values():
+                btn.set_sensitive(has_image)
 
     def set_undo_sensitive(self, sensitive: bool) -> None:
         self.btn_undo.set_sensitive(sensitive)

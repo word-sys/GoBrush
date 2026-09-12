@@ -33,28 +33,47 @@ class TestGeneralNavigation(unittest.TestCase):
         self.canvas.drag_to_pan = False
         self.assertFalse(self.canvas.drag_to_pan)
 
-    def test_double_click_toggle_fit_and_actual(self) -> None:
-        large_surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 1600, 1200)
-        self.canvas.set_image_surface(large_surf, 1600, 1200)
-        self.canvas.zoom_fit(viewport_width=800, viewport_height=600, animate=False)
-        fit_zoom = self.canvas.zoom
-        self.assertAlmostEqual(fit_zoom, 0.4666, places=2)
+    def test_set_zoom_level_presets_and_centering(self) -> None:
+        large_surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 400, 300)
+        self.canvas.set_image_surface(large_surf, 400, 300)
 
-        # Double-click when at fit zoom -> toggles to 1.0 (100% actual size)
-        self.canvas.toggle_zoom_fit_actual(pivot=(400.0, 300.0), viewport_width=800, viewport_height=600, animate=False)
-        self.assertAlmostEqual(self.canvas.zoom, 1.0, places=4)
+        # 50% zoom in 800x600 viewport
+        self.canvas.set_zoom_level(0.50, viewport_width=800, viewport_height=600)
+        self.assertAlmostEqual(self.canvas.zoom, 0.50)
+        # 400 * 0.5 = 200; (800 - 200) / 2 = 300
+        # 300 * 0.5 = 150; (600 - 150) / 2 = 225
+        self.assertAlmostEqual(self.canvas.pan_x, 300.0)
+        self.assertAlmostEqual(self.canvas.pan_y, 225.0)
 
-        # Double-click again when at 1.0 -> toggles back to fit
-        self.canvas.toggle_zoom_fit_actual(pivot=(400.0, 300.0), viewport_width=800, viewport_height=600, animate=False)
-        self.assertAlmostEqual(self.canvas.zoom, fit_zoom, places=2)
+        # 100% zoom in 800x600 viewport
+        self.canvas.set_zoom_level(1.00, viewport_width=800, viewport_height=600)
+        self.assertAlmostEqual(self.canvas.zoom, 1.00)
+        self.assertAlmostEqual(self.canvas.pan_x, 200.0)
+        self.assertAlmostEqual(self.canvas.pan_y, 150.0)
 
-    def test_single_click_does_not_toggle_zoom(self) -> None:
-        self.canvas.zoom_fit(viewport_width=1000, viewport_height=800, animate=False)
-        initial_zoom = self.canvas.zoom
+        # 25% zoom in 800x600 viewport
+        self.canvas.set_zoom_level(0.25, viewport_width=800, viewport_height=600)
+        self.assertAlmostEqual(self.canvas.zoom, 0.25)
+        self.assertAlmostEqual(self.canvas.pan_x, 350.0)
+        self.assertAlmostEqual(self.canvas.pan_y, 262.5)
 
-        # Single click (n_press = 1) must not change zoom
-        self.canvas._on_click_pressed(self.canvas._click_gesture, 1, 500.0, 400.0)
-        self.assertEqual(self.canvas.zoom, initial_zoom)
+    def test_image_opened_centered_in_middle_on_first_draw(self) -> None:
+        canvas = Canvas()
+        # Initial state before widget is allocated
+        surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 256, 256)
+        canvas.set_image_surface(surf, 256, 256)
+        self.assertTrue(canvas._pending_fit)
+
+        # Simulate first draw with allocated size 800x600
+        target_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 800, 600)
+        cr = cairo.Context(target_surface)
+        canvas._on_draw(canvas, cr, 800, 600)
+
+        self.assertFalse(canvas._pending_fit)
+        self.assertAlmostEqual(canvas.zoom, 1.0)
+        # Centered: (800 - 256) / 2 = 272, (600 - 256) / 2 = 172
+        self.assertAlmostEqual(canvas.pan_x, 272.0)
+        self.assertAlmostEqual(canvas.pan_y, 172.0)
 
     def test_arrow_keys_navigation(self) -> None:
         ctrl = self.canvas._key_controller
@@ -126,6 +145,42 @@ class TestGeneralNavigation(unittest.TestCase):
         action.change_state(GLib.Variant.new_boolean(True))
         self.assertTrue(win.canvas.scroll_to_zoom)
         self.assertTrue(action.get_state().get_boolean())
+
+    def test_main_menu_zoom_buttons_and_presets(self) -> None:
+        win = MainWindow()
+        self.assertIsNotNone(win.menu_popover)
+        self.assertIsNotNone(win.btn_zoom_out)
+        self.assertIsNotNone(win.btn_zoom_fit)
+        self.assertIsNotNone(win.btn_zoom_100)
+        self.assertIsNotNone(win.btn_zoom_in)
+
+        # In empty state, buttons are insensitive
+        self.assertFalse(win.btn_zoom_100.get_sensitive())
+        for pct in (25, 50, 75, 100, 150, 200):
+            self.assertIn(pct, win.preset_buttons)
+            self.assertFalse(win.preset_buttons[pct].get_sensitive())
+
+        # Load image -> buttons become sensitive
+        surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 400, 400)
+        win.load_surface(surf, has_alpha=False)
+        self.assertTrue(win.btn_zoom_100.get_sensitive())
+        self.assertTrue(win.preset_buttons[50].get_sensitive())
+
+        # Click preset 50%
+        win.preset_buttons[50].emit("clicked")
+        self.assertAlmostEqual(win.canvas.zoom, 0.50)
+
+        # Click preset 200%
+        win.preset_buttons[200].emit("clicked")
+        self.assertAlmostEqual(win.canvas.zoom, 2.00)
+
+        # Click 100%
+        win.btn_zoom_100.emit("clicked")
+        self.assertAlmostEqual(win.canvas.zoom, 1.00)
+
+        # Click Fit
+        win.btn_zoom_fit.emit("clicked")
+        self.assertIsNotNone(win.canvas.zoom)
 
 
 if __name__ == "__main__":

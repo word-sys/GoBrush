@@ -4,11 +4,14 @@ A lightweight, fast image annotation and screenshot markup utility for Linux des
 
 ## Features
 
-- **Fast & Responsive**: Instant startup with hardware-accelerated Cairo rendering.
-- **Fluid Navigation**:
-  - Smooth mouse wheel zoom (10% to 3200%) centered on the cursor (`Ctrl + Scroll`).
-  - Smooth keyboard zoom presets (100% 1:1, Fit to Window, Zoom In/Out).
-  - Panning via middle mouse button or `Space + Left-click drag`.
+- **Fast & Responsive**: Instant startup with hardware-accelerated Cairo rendering and automatic centered viewport placement.
+- **Fluid General Navigation**:
+  - Direct mouse wheel and trackpad scroll zoom centered on cursor (10% to 3200%, toggleable via "Zoom on Scroll" in Main Menu).
+  - Two-finger pinch-to-zoom on trackpads and touchscreens centered on gesture focus.
+  - Viewport panning via middle mouse drag or `Space + Left-click drag`.
+  - Arrow keys for smooth panning with `Shift` acceleration (3× speed).
+  - Main Menu controls: Quick action buttons (`−`, `Fit`, `100%`, `+`) and one-click zoom presets (`25%`, `50%`, `75%`, `100%`, `150%`, `200%`).
+  - Single-key keyboard shortcuts (`+` / `-`, `1` for 100%, `F` for Fit).
 - **Text-First & Intuitive UI**: Clear text actions in the header bar and tool panels for immediate readability.
 - **Multi-Format Support**: Opens and edits PNG, JPEG, and WebP with full alpha transparency handling and checkerboard background.
 - **Annotation Tools** (in active development):
@@ -65,7 +68,6 @@ Open an image directly from the command line:
 | `Shift + Scroll` | Pan viewport |
 | `Left Mouse Drag` | Pan viewport (in navigation mode or holding `Space`) |
 | `Middle Mouse Drag` | Pan viewport |
-| `Double Click` | Toggle between Fit to Window and 100% (1:1 actual size) |
 | `+` / `=` / `Ctrl + +` / `Ctrl + =` | Zoom In |
 | `-` / `Ctrl + -` | Zoom Out |
 | `1` / `Ctrl + 0` | 1:1 Actual Size (100%) |
