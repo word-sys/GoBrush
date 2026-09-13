@@ -31,11 +31,21 @@ class GoBrushApp(Adw.Application):
         self._action_paste.connect("activate", self._on_paste_activate)
         self.add_action(self._action_paste)
 
+        self._action_copy = Gio.SimpleAction.new("copy-clipboard", None)
+        self._action_copy.connect("activate", self._on_copy_activate)
+        self.add_action(self._action_copy)
+
     def _on_paste_activate(self, action: Gio.SimpleAction, param: Any) -> None:
         self.activate()
         win = self.props.active_window
         if isinstance(win, MainWindow):
             win.paste_from_clipboard()
+
+    def _on_copy_activate(self, action: Gio.SimpleAction, param: Any) -> None:
+        self.activate()
+        win = self.props.active_window
+        if isinstance(win, MainWindow):
+            win.copy_to_clipboard()
 
     def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:
         options = command_line.get_options_dict()

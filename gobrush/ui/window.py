@@ -78,6 +78,10 @@ class MainWindow(Adw.ApplicationWindow):
         self._action_paste.connect("activate", lambda *_: self.paste_from_clipboard())
         self.add_action(self._action_paste)
 
+        self._action_copy = Gio.SimpleAction.new("copy-clipboard", None)
+        self._action_copy.connect("activate", lambda *_: self.copy_to_clipboard())
+        self.add_action(self._action_copy)
+
     def _on_scroll_to_zoom_changed(self, action: Gio.SimpleAction, value: GLib.Variant) -> None:
         action.set_state(value)
         is_active = value.get_boolean()
@@ -126,6 +130,7 @@ class MainWindow(Adw.ApplicationWindow):
             tooltip_text="Copy to Clipboard (Ctrl+C)",
             sensitive=False,
         )
+        self.btn_copy.connect("clicked", lambda _: self.copy_to_clipboard())
         self.header_bar.pack_end(self.btn_copy)
 
     def _build_menu(self) -> None:
@@ -294,6 +299,10 @@ class MainWindow(Adw.ApplicationWindow):
     def action_paste(self) -> Gio.SimpleAction:
         return self._action_paste
 
+    @property
+    def action_copy(self) -> Gio.SimpleAction:
+        return self._action_copy
+
     def load_surface(
         self,
         surface: cairo.ImageSurface,
@@ -389,6 +398,51 @@ class MainWindow(Adw.ApplicationWindow):
             self.show_toast("No image found in clipboard")
             if callback:
                 callback(False)
+
+    def copy_to_clipboard(
+        self,
+        clipboard: Gdk.Clipboard | None = None,
+        callback: Callable[[bool], None] | None = None,
+    ) -> bool:
+        if not self.canvas.has_image:
+            self.show_toast("No image to copy")
+            if callback:
+                callback(False)
+            return False
+
+        surface = self.canvas.get_flattened_surface()
+        if surface is None:
+            self.show_toast("Failed to copy image")
+            if callback:
+                callback(False)
+            return False
+
+        try:
+            cb = clipboard if clipboard is not None else self.get_clipboard()
+        except Exception:
+            cb = None
+
+        if cb is None:
+            self.show_toast("No clipboard available")
+            if callback:
+                callback(False)
+            return False
+
+        try:
+            pixbuf = Gdk.pixbuf_get_from_surface(
+                surface, 0, 0, surface.get_width(), surface.get_height()
+            )
+            texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+            cb.set(texture)
+            self.show_toast("Copied to clipboard")
+            if callback:
+                callback(True)
+            return True
+        except Exception as e:
+            self.show_toast(f"Error copying image: {e}")
+            if callback:
+                callback(False)
+            return False
 
     def open_file(self, path: str | Path) -> bool:
         p = Path(path).expanduser().resolve()
@@ -502,6 +556,10 @@ class MainWindow(Adw.ApplicationWindow):
 
         if is_ctrl and keyval in (Gdk.KEY_v, Gdk.KEY_V):
             self.paste_from_clipboard()
+            return True
+
+        if is_ctrl and keyval in (Gdk.KEY_c, Gdk.KEY_C):
+            self.copy_to_clipboard()
             return True
 
         if not self.is_empty():

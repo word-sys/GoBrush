@@ -547,6 +547,24 @@ class Canvas(Gtk.DrawingArea):
     def clear(self) -> None:
         self.set_image_surface(None)
 
+    def get_flattened_surface(self) -> cairo.ImageSurface | None:
+        if not self.has_image or self._image_width <= 0 or self._image_height <= 0:
+            return None
+
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self._image_width, self._image_height)
+        cr = cairo.Context(surface)
+
+        if self._image_surface is not None:
+            cr.set_source_surface(self._image_surface, 0, 0)
+            cr.paint()
+
+        for hook in self._image_draw_hooks:
+            cr.save()
+            hook(cr)
+            cr.restore()
+
+        return surface
+
     def add_image_draw_hook(self, hook: Callable[[cairo.Context], None]) -> None:
         if hook not in self._image_draw_hooks:
             self._image_draw_hooks.append(hook)
