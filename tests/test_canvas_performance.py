@@ -104,6 +104,41 @@ class TestCanvasPerformance(unittest.TestCase):
         surf, has_alpha = load_image_with_info(buf_png)
         self.assertFalse(has_alpha)
 
+    def test_image_pyramid_generated_for_large_image(self) -> None:
+        # Large image (3000x4000) should generate pyramid downsample levels (0.5, 0.25, 0.125)
+        self.assertGreater(len(self.canvas._image_pyramid), 0)
+        scales = [scale for scale, _ in self.canvas._image_pyramid]
+        self.assertIn(0.5, scales)
+        self.assertIn(0.25, scales)
+
+    def test_select_draw_surface_low_zoom(self) -> None:
+        # At 100% (1.0), main surface should be selected
+        scale_100, surf_100 = self.canvas._select_draw_surface(1.0)
+        self.assertIs(surf_100, self.surface)
+        self.assertEqual(scale_100, 1.0)
+
+        # At fit / low zoom (~0.32), a downsampled pyramid level should be selected
+        scale_32, surf_32 = self.canvas._select_draw_surface(0.32)
+        self.assertIsNot(surf_32, self.surface)
+        self.assertLess(scale_32, 1.0)
+        self.assertEqual(scale_32, 0.25)
+
+    def test_interaction_adaptive_filter(self) -> None:
+        self.canvas.set_zoom(0.32)
+        # Stationary: filter should be FILTER_GOOD
+        self.assertFalse(self.canvas._is_interacting)
+        self.assertEqual(self.canvas.get_active_filter(), cairo.FILTER_GOOD)
+
+        # Active interaction (panning/moving): filter should switch to FILTER_FAST
+        self.canvas._set_interacting(True)
+        self.assertTrue(self.canvas._is_interacting)
+        self.assertEqual(self.canvas.get_active_filter(), cairo.FILTER_FAST)
+
+        # Return to stationary
+        self.canvas._set_interacting(False)
+        self.assertFalse(self.canvas._is_interacting)
+        self.assertEqual(self.canvas.get_active_filter(), cairo.FILTER_GOOD)
+
 
 if __name__ == "__main__":
     unittest.main()

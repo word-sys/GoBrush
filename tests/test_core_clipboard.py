@@ -95,6 +95,38 @@ class TestCoreClipboard(unittest.TestCase):
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
+    def test_encode_surface_for_format_unmodified_jpeg_passthrough(self) -> None:
+        fake_jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 32
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+            f.write(fake_jpeg)
+            tmp_path = f.name
+
+        try:
+            surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 10, 10)
+            data, mimes = encode_surface_for_format(
+                surf, "jpeg", file_path=tmp_path, has_annotations=False
+            )
+            self.assertEqual(data, fake_jpeg)
+            self.assertEqual(mimes, ["image/jpeg", "image/jpg"])
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+
+    def test_encode_surface_for_format_unmodified_png_passthrough(self) -> None:
+        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            f.write(fake_png)
+            tmp_path = f.name
+
+        try:
+            surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 10, 10)
+            data, mimes = encode_surface_for_format(
+                surf, "png", file_path=tmp_path, has_annotations=False
+            )
+            self.assertEqual(data, fake_png)
+            self.assertEqual(mimes, ["image/png"])
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+
     def test_create_clipboard_content_provider_jpeg(self) -> None:
         surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 16, 16)
         cp, display_name = create_clipboard_content_provider(surf, "jpeg")
@@ -104,7 +136,10 @@ class TestCoreClipboard(unittest.TestCase):
         self.assertTrue(formats.contain_mime_type("image/jpg"))
         mimes = formats.get_mime_types()
         self.assertEqual(mimes[0], "image/jpeg")
-        self.assertTrue(formats.contain_mime_type("image/png"))
+        self.assertTrue(
+            formats.contain_gtype(Gdk.Texture.__gtype__)
+            or formats.contain_gtype(Gdk.MemoryTexture.__gtype__)
+        )
 
     def test_create_clipboard_content_provider_ico(self) -> None:
         surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 16, 16)
@@ -114,7 +149,10 @@ class TestCoreClipboard(unittest.TestCase):
         self.assertTrue(formats.contain_mime_type("image/x-icon"))
         mimes = formats.get_mime_types()
         self.assertEqual(mimes[0], "image/x-icon")
-        self.assertTrue(formats.contain_mime_type("image/png"))
+        self.assertTrue(
+            formats.contain_gtype(Gdk.Texture.__gtype__)
+            or formats.contain_gtype(Gdk.MemoryTexture.__gtype__)
+        )
 
     def test_create_clipboard_content_provider_svg(self) -> None:
         surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 16, 16)
@@ -124,7 +162,10 @@ class TestCoreClipboard(unittest.TestCase):
         self.assertTrue(formats.contain_mime_type("image/svg+xml"))
         mimes = formats.get_mime_types()
         self.assertEqual(mimes[0], "image/svg+xml")
-        self.assertTrue(formats.contain_mime_type("image/png"))
+        self.assertTrue(
+            formats.contain_gtype(Gdk.Texture.__gtype__)
+            or formats.contain_gtype(Gdk.MemoryTexture.__gtype__)
+        )
 
     def test_create_clipboard_content_provider_with_file(self) -> None:
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:

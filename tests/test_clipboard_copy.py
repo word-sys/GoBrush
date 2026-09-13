@@ -109,7 +109,10 @@ class TestClipboardCopy(unittest.TestCase):
         self.assertTrue(formats.contain_mime_type("image/jpeg"))
         self.assertTrue(formats.contain_mime_type("image/jpg"))
         self.assertEqual(formats.get_mime_types()[0], "image/jpeg")
-        self.assertTrue(formats.contain_mime_type("image/png"))
+        self.assertTrue(
+            formats.contain_gtype(Gdk.Texture.__gtype__)
+            or formats.contain_gtype(Gdk.MemoryTexture.__gtype__)
+        )
 
     def test_copy_preserves_ico_format(self) -> None:
         win = MainWindow()
@@ -124,7 +127,10 @@ class TestClipboardCopy(unittest.TestCase):
         formats = cp.ref_formats()
         self.assertTrue(formats.contain_mime_type("image/x-icon"))
         self.assertEqual(formats.get_mime_types()[0], "image/x-icon")
-        self.assertTrue(formats.contain_mime_type("image/png"))
+        self.assertTrue(
+            formats.contain_gtype(Gdk.Texture.__gtype__)
+            or formats.contain_gtype(Gdk.MemoryTexture.__gtype__)
+        )
 
     def test_copy_preserves_svg_format(self) -> None:
         win = MainWindow()
@@ -139,7 +145,10 @@ class TestClipboardCopy(unittest.TestCase):
         formats = cp.ref_formats()
         self.assertTrue(formats.contain_mime_type("image/svg+xml"))
         self.assertEqual(formats.get_mime_types()[0], "image/svg+xml")
-        self.assertTrue(formats.contain_mime_type("image/png"))
+        self.assertTrue(
+            formats.contain_gtype(Gdk.Texture.__gtype__)
+            or formats.contain_gtype(Gdk.MemoryTexture.__gtype__)
+        )
 
     def test_copy_unmodified_svg_file_preserves_exact_bytes(self) -> None:
         svg_content = b'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>'

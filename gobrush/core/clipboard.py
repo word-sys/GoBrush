@@ -82,14 +82,18 @@ def encode_surface_for_format(
     norm_fmt = normalize_image_format(fmt)
     mime_types = get_mime_types_for_format(norm_fmt)
 
-    # For unmodified SVG files, pass through exact vector XML bytes
-    if norm_fmt == "svg" and file_path and not has_annotations:
-        p = Path(file_path)
-        if p.is_file() and p.suffix.lower() == ".svg":
-            try:
-                return p.read_bytes(), mime_types
-            except Exception:
-                pass
+    # For unmodified files on disk matching the target format, pass through raw bytes directly.
+    # This is instantaneous (<1ms), preserves 100% original quality without recompression,
+    # and retains all camera EXIF metadata.
+    if file_path and not has_annotations:
+        p = Path(file_path).resolve()
+        if p.is_file():
+            file_fmt = normalize_image_format(p.suffix)
+            if file_fmt == norm_fmt:
+                try:
+                    return p.read_bytes(), mime_types
+                except Exception:
+                    pass
 
     # For all raster formats (JPEG, ICO, PNG, WEBP, BMP, etc.), encode directly
     # from the surface so pixel orientation is physically upright, avoiding
@@ -112,19 +116,34 @@ def encode_surface_for_format(
         ).encode("utf-8")
         return svg_xml, mime_types
 
-    im = cairo_surface_to_pil(surface)
     out = io.BytesIO()
 
     if norm_fmt == "jpeg":
+        # Ultra-fast path: if surface is completely opaque, extract RGB directly without un-premultiplication
+        try:
+            import numpy as np
+            w, h = surface.get_width(), surface.get_height()
+            c_data = np.frombuffer(surface.get_data(), dtype=np.uint8).reshape((h, w, 4))
+            if np.all(c_data[:, :, 3] == 255):
+                rgb = c_data[:, :, [2, 1, 0]]
+                im_rgb = Image.fromarray(rgb, "RGB")
+                im_rgb.save(out, format="JPEG", quality=92)
+                return out.getvalue(), mime_types
+        except Exception:
+            pass
+
+        im = cairo_surface_to_pil(surface)
         if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
             bg = Image.new("RGB", im.size, (255, 255, 255))
             if im.mode != "RGBA":
                 im = im.convert("RGBA")
             bg.paste(im, mask=im.split()[3])
-            bg.save(out, format="JPEG", quality=95)
+            bg.save(out, format="JPEG", quality=92)
         else:
-            im.convert("RGB").save(out, format="JPEG", quality=95)
+            im.convert("RGB").save(out, format="JPEG", quality=92)
         return out.getvalue(), mime_types
+
+    im = cairo_surface_to_pil(surface)
 
     if norm_fmt == "ico":
         w, h = im.size
@@ -169,7 +188,7 @@ def create_clipboard_content_provider(
 
     providers: list[Gdk.ContentProvider] = []
 
-    # 1. Primary format MIME types first (e.g. image/jpeg, image/x-icon, image/svg+xml)
+    # 1. Primary format MIME types first (e.g. image/jpeg, image/x-icon, image/svg+xml, image/png)
     for mime in mime_types:
         providers.append(Gdk.ContentProvider.new_for_bytes(mime, gbytes))
 
@@ -182,19 +201,10 @@ def create_clipboard_content_provider(
             providers.append(Gdk.ContentProvider.new_for_bytes("text/uri-list", GLib.Bytes.new(uri_list)))
             providers.append(Gdk.ContentProvider.new_for_bytes("x-special/gnome-copied-files", GLib.Bytes.new(gnome_copied)))
 
-    # 3. Universal PNG fallback for web browsers, Electron apps (Discord, Slack), and apps
-    # that only implement image/png clipboard support
-    if norm_fmt != "png":
-        png_buf = io.BytesIO()
-        surface.write_to_png(png_buf)
-        png_gbytes = GLib.Bytes.new(png_buf.getvalue())
-        providers.append(Gdk.ContentProvider.new_for_bytes("image/png", png_gbytes))
-
-    # 4. Native GdkTexture for internal GTK4 applications
+    # 3. Native GdkTexture for internal GTK4 applications and desktop image paste
     try:
-        pixbuf = Gdk.pixbuf_get_from_surface(
-            surface, 0, 0, surface.get_width(), surface.get_height()
-        )
+        w, h = surface.get_width(), surface.get_height()
+        pixbuf = Gdk.pixbuf_get_from_surface(surface, 0, 0, w, h)
         if pixbuf is not None:
             texture = Gdk.Texture.new_for_pixbuf(pixbuf)
             if texture is not None:

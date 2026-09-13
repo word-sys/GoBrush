@@ -147,19 +147,29 @@ def cairo_surface_to_pil(surface: cairo.ImageSurface) -> Image.Image:
     data = surface.get_data()
 
     if _HAVE_NUMPY:
-        # Vectorized un-premultiplication: R = (R * 255) / A
         c_data = np.frombuffer(data, dtype=np.uint8).reshape((h, w, 4))
+        ca = c_data[:, :, 3]
+        if np.all(ca == 255):
+            # Pure opaque: zero un-premultiplication math needed, fast BGRA -> RGBA channel swap
+            rgba = np.empty_like(c_data)
+            rgba[:, :, 0] = c_data[:, :, 2]  # R
+            rgba[:, :, 1] = c_data[:, :, 1]  # G
+            rgba[:, :, 2] = c_data[:, :, 0]  # B
+            rgba[:, :, 3] = 255
+            return Image.fromarray(rgba, "RGBA")
+
+        # Vectorized un-premultiplication: R = (R * 255) / A
         cb = c_data[:, :, 0].astype(np.uint32)
         cg = c_data[:, :, 1].astype(np.uint32)
         cr = c_data[:, :, 2].astype(np.uint32)
-        ca = c_data[:, :, 3].astype(np.uint32)
+        ca_32 = ca.astype(np.uint32)
 
-        safe_a = np.where(ca > 0, ca, 1)
+        safe_a = np.where(ca_32 > 0, ca_32, 1)
         un_arr = np.empty_like(c_data)
         un_arr[:, :, 0] = np.clip((cr * 255 + safe_a // 2) // safe_a, 0, 255).astype(np.uint8)
         un_arr[:, :, 1] = np.clip((cg * 255 + safe_a // 2) // safe_a, 0, 255).astype(np.uint8)
         un_arr[:, :, 2] = np.clip((cb * 255 + safe_a // 2) // safe_a, 0, 255).astype(np.uint8)
-        un_arr[:, :, 3] = ca.astype(np.uint8)
+        un_arr[:, :, 3] = ca
         return Image.fromarray(un_arr, "RGBA")
     else:
         raw = bytearray(data)
