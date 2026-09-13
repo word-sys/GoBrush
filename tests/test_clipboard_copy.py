@@ -1,4 +1,6 @@
 from __future__ import annotations
+import tempfile
+from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 import uuid
@@ -92,6 +94,98 @@ class TestClipboardCopy(unittest.TestCase):
             formats.contain_gtype(Gdk.MemoryTexture.__gtype__)
             or formats.contain_gtype(Gdk.Texture.__gtype__)
         )
+
+    def test_copy_preserves_jpeg_format(self) -> None:
+        win = MainWindow()
+        surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 50, 50)
+        win.load_surface(surf, has_alpha=False, image_format="jpeg")
+
+        mock_cb = Mock()
+        res = win.copy_to_clipboard(clipboard=mock_cb)
+        self.assertTrue(res)
+        mock_cb.set_content.assert_called_once()
+        cp = mock_cb.set_content.call_args[0][0]
+        formats = cp.ref_formats()
+        self.assertTrue(formats.contain_mime_type("image/jpeg"))
+        self.assertTrue(formats.contain_mime_type("image/jpg"))
+        self.assertEqual(formats.get_mime_types()[0], "image/jpeg")
+        self.assertTrue(formats.contain_mime_type("image/png"))
+
+    def test_copy_preserves_ico_format(self) -> None:
+        win = MainWindow()
+        surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 50, 50)
+        win.load_surface(surf, has_alpha=True, image_format="ico")
+
+        mock_cb = Mock()
+        res = win.copy_to_clipboard(clipboard=mock_cb)
+        self.assertTrue(res)
+        mock_cb.set_content.assert_called_once()
+        cp = mock_cb.set_content.call_args[0][0]
+        formats = cp.ref_formats()
+        self.assertTrue(formats.contain_mime_type("image/x-icon"))
+        self.assertEqual(formats.get_mime_types()[0], "image/x-icon")
+        self.assertTrue(formats.contain_mime_type("image/png"))
+
+    def test_copy_preserves_svg_format(self) -> None:
+        win = MainWindow()
+        surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 50, 50)
+        win.load_surface(surf, has_alpha=True, image_format="svg")
+
+        mock_cb = Mock()
+        res = win.copy_to_clipboard(clipboard=mock_cb)
+        self.assertTrue(res)
+        mock_cb.set_content.assert_called_once()
+        cp = mock_cb.set_content.call_args[0][0]
+        formats = cp.ref_formats()
+        self.assertTrue(formats.contain_mime_type("image/svg+xml"))
+        self.assertEqual(formats.get_mime_types()[0], "image/svg+xml")
+        self.assertTrue(formats.contain_mime_type("image/png"))
+
+    def test_copy_unmodified_svg_file_preserves_exact_bytes(self) -> None:
+        svg_content = b'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>'
+        with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
+            f.write(svg_content)
+            svg_path = f.name
+
+        try:
+            win = MainWindow()
+            surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 10, 10)
+            win.load_surface(surf, has_alpha=True, file_path=svg_path)
+
+            mock_cb = Mock()
+            res = win.copy_to_clipboard(clipboard=mock_cb)
+            self.assertTrue(res)
+            mock_cb.set_content.assert_called_once()
+            cp = mock_cb.set_content.call_args[0][0]
+            formats = cp.ref_formats()
+            self.assertTrue(formats.contain_mime_type("image/svg+xml"))
+            self.assertEqual(formats.get_mime_types()[0], "image/svg+xml")
+            self.assertTrue(formats.contain_mime_type("text/uri-list"))
+        finally:
+            Path(svg_path).unlink(missing_ok=True)
+
+    def test_copy_unmodified_jpeg_file_preserves_exact_bytes(self) -> None:
+        jpeg_header = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 30
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+            f.write(jpeg_header)
+            jpg_path = f.name
+
+        try:
+            win = MainWindow()
+            surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 10, 10)
+            win.load_surface(surf, has_alpha=False, file_path=jpg_path)
+
+            mock_cb = Mock()
+            res = win.copy_to_clipboard(clipboard=mock_cb)
+            self.assertTrue(res)
+            mock_cb.set_content.assert_called_once()
+            cp = mock_cb.set_content.call_args[0][0]
+            formats = cp.ref_formats()
+            self.assertTrue(formats.contain_mime_type("image/jpeg"))
+            self.assertEqual(formats.get_mime_types()[0], "image/jpeg")
+            self.assertTrue(formats.contain_mime_type("text/uri-list"))
+        finally:
+            Path(jpg_path).unlink(missing_ok=True)
 
     def test_copy_to_clipboard_no_clipboard_available(self) -> None:
         win = MainWindow()

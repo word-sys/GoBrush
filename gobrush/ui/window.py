@@ -14,6 +14,11 @@ from gi.repository import Gtk, Gdk, Adw, Gio, GLib, GObject
 from gobrush import __version__
 from gobrush.compat.dialogs import open_file_dialog
 from gobrush.core.loader import load_image_with_info, is_supported_image, ImageLoadError
+from gobrush.core.clipboard import (
+    create_clipboard_content_provider,
+    normalize_image_format,
+    get_format_display_name,
+)
 from gobrush.ui.empty_state import EmptyStateView
 from gobrush.ui.canvas import Canvas
 from gobrush.ui.canvas_view import CanvasView
@@ -40,6 +45,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.content_bin = Adw.Bin()
         self.toast_overlay.set_child(self.content_bin)
         self._current_file_path: str | None = None
+        self._current_format: str = "png"
         self.canvas_view = CanvasView()
         self.canvas = self.canvas_view.canvas
         self.status_bar = self.canvas_view.status_bar
@@ -310,6 +316,7 @@ class MainWindow(Adw.ApplicationWindow):
         has_alpha: bool = True,
         title: str = "Pasted Image - GoBrush",
         file_path: str | None = None,
+        image_format: str | None = None,
     ) -> None:
         self.canvas.set_image_surface(
             surface,
@@ -320,6 +327,12 @@ class MainWindow(Adw.ApplicationWindow):
         self.show_canvas()
         self.canvas.zoom_fit()
         self._current_file_path = file_path
+        if image_format:
+            self._current_format = normalize_image_format(image_format)
+        elif file_path:
+            self._current_format = normalize_image_format(Path(file_path).suffix)
+        else:
+            self._current_format = "png"
         self.set_title(title)
 
     def load_pasted_image(self, source: Any) -> bool:
@@ -404,6 +417,7 @@ class MainWindow(Adw.ApplicationWindow):
         self,
         clipboard: Gdk.Clipboard | None = None,
         callback: Callable[[bool], None] | None = None,
+        target_format: str | None = None,
     ) -> bool:
         if not self.canvas.has_image:
             self.show_toast("No image to copy")
@@ -430,28 +444,27 @@ class MainWindow(Adw.ApplicationWindow):
             return False
 
         try:
-            png_buf = io.BytesIO()
-            surface.write_to_png(png_buf)
-            gbytes = GLib.Bytes.new(png_buf.getvalue())
-
-            pixbuf = Gdk.pixbuf_get_from_surface(
-                surface, 0, 0, surface.get_width(), surface.get_height()
+            fmt = target_format or self._current_format
+            has_annotations = bool(getattr(self.canvas, "_image_draw_hooks", None))
+            content_provider, display_name = create_clipboard_content_provider(
+                surface=surface,
+                fmt=fmt,
+                file_path=self._current_file_path,
+                has_annotations=has_annotations,
             )
-            texture = Gdk.Texture.new_for_pixbuf(pixbuf)
-
-            cp_bytes = Gdk.ContentProvider.new_for_bytes("image/png", gbytes)
-            cp_pixbuf = Gdk.ContentProvider.new_for_value(pixbuf)
-            cp_tex = Gdk.ContentProvider.new_for_value(texture)
-            content_provider = Gdk.ContentProvider.new_union([cp_bytes, cp_pixbuf, cp_tex])
 
             self._clipboard_content_provider = content_provider
 
             if hasattr(cb, "set_content"):
                 cb.set_content(content_provider)
             else:
+                pixbuf = Gdk.pixbuf_get_from_surface(
+                    surface, 0, 0, surface.get_width(), surface.get_height()
+                )
+                texture = Gdk.Texture.new_for_pixbuf(pixbuf)
                 cb.set(texture)
 
-            self.show_toast("Copied to clipboard")
+            self.show_toast(f"Copied {display_name} to clipboard")
             if callback:
                 callback(True)
             return True
@@ -486,6 +499,7 @@ class MainWindow(Adw.ApplicationWindow):
     def close_file(self) -> None:
         self.canvas.clear()
         self._current_file_path = None
+        self._current_format = "png"
         self.set_title("GoBrush")
         self.show_empty_state()
 

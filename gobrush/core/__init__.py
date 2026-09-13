@@ -13,6 +13,13 @@ from gobrush.core.loader import (
     pil_to_cairo_surface_with_info,
     cairo_surface_to_pil,
 )
+from gobrush.core.clipboard import (
+    normalize_image_format,
+    get_format_display_name,
+    get_mime_types_for_format,
+    encode_surface_for_format,
+    create_clipboard_content_provider,
+)
 
 __all__ = [
     "ViewportTransform",
@@ -27,5 +34,10 @@ __all__ = [
     "pil_to_cairo_surface",
     "pil_to_cairo_surface_with_info",
     "cairo_surface_to_pil",
+    "normalize_image_format",
+    "get_format_display_name",
+    "get_mime_types_for_format",
+    "encode_surface_for_format",
+    "create_clipboard_content_provider",
 ]
 
