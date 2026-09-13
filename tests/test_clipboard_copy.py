@@ -64,6 +64,7 @@ class TestClipboardCopy(unittest.TestCase):
         mock_cb = Mock()
         res = win.copy_to_clipboard(clipboard=mock_cb)
         self.assertFalse(res)
+        mock_cb.set_content.assert_not_called()
         mock_cb.set.assert_not_called()
 
     def test_copy_to_clipboard_with_image_success(self) -> None:
@@ -81,9 +82,16 @@ class TestClipboardCopy(unittest.TestCase):
         res = win.copy_to_clipboard(clipboard=mock_cb, callback=cb_result)
         self.assertTrue(res)
         self.assertTrue(callback_called)
-        mock_cb.set.assert_called_once()
-        args, _ = mock_cb.set.call_args
-        self.assertIsInstance(args[0], Gdk.Texture)
+        mock_cb.set_content.assert_called_once()
+        args, _ = mock_cb.set_content.call_args
+        cp = args[0]
+        self.assertIsInstance(cp, Gdk.ContentProvider)
+        formats = cp.ref_formats()
+        self.assertTrue(formats.contain_mime_type("image/png"))
+        self.assertTrue(
+            formats.contain_gtype(Gdk.MemoryTexture.__gtype__)
+            or formats.contain_gtype(Gdk.Texture.__gtype__)
+        )
 
     def test_copy_to_clipboard_no_clipboard_available(self) -> None:
         win = MainWindow()

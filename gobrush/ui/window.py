@@ -1,4 +1,5 @@
 from __future__ import annotations
+import io
 import os
 import urllib.parse
 from pathlib import Path
@@ -429,11 +430,27 @@ class MainWindow(Adw.ApplicationWindow):
             return False
 
         try:
+            png_buf = io.BytesIO()
+            surface.write_to_png(png_buf)
+            gbytes = GLib.Bytes.new(png_buf.getvalue())
+
             pixbuf = Gdk.pixbuf_get_from_surface(
                 surface, 0, 0, surface.get_width(), surface.get_height()
             )
             texture = Gdk.Texture.new_for_pixbuf(pixbuf)
-            cb.set(texture)
+
+            cp_bytes = Gdk.ContentProvider.new_for_bytes("image/png", gbytes)
+            cp_pixbuf = Gdk.ContentProvider.new_for_value(pixbuf)
+            cp_tex = Gdk.ContentProvider.new_for_value(texture)
+            content_provider = Gdk.ContentProvider.new_union([cp_bytes, cp_pixbuf, cp_tex])
+
+            self._clipboard_content_provider = content_provider
+
+            if hasattr(cb, "set_content"):
+                cb.set_content(content_provider)
+            else:
+                cb.set(texture)
+
             self.show_toast("Copied to clipboard")
             if callback:
                 callback(True)
