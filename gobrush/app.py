@@ -26,6 +26,14 @@ class GoBrushApp(Adw.Application):
             "Show version",
             None,
         )
+        self.add_main_option(
+            "clipboard",
+            ord("c"),
+            GLib.OptionFlags.NONE,
+            GLib.OptionArg.NONE,
+            "Open directly with current image from system clipboard",
+            None,
+        )
 
         self._action_paste = Gio.SimpleAction.new("paste-clipboard", None)
         self._action_paste.connect("activate", self._on_paste_activate)
@@ -57,6 +65,15 @@ class GoBrushApp(Adw.Application):
         win = self.props.active_window
 
         args = command_line.get_arguments()
+        if (
+            options.contains("clipboard")
+            or "-c" in args
+            or "--clipboard" in args
+        ):
+            if isinstance(win, MainWindow):
+                win.paste_from_clipboard()
+            return 0
+
         file_to_open: str | None = None
         for arg in args[1:]:
             if not arg.startswith("-"):

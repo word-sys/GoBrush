@@ -42,6 +42,42 @@ class TestCliAndOpen(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("GoBrush", fake_out.getvalue())
 
+    def test_cli_clipboard_option_long(self) -> None:
+        app = _create_test_app()
+        app.register(None)
+
+        class MockCommandLine:
+            def get_options_dict(self):
+                return type("MockDict", (), {"contains": lambda self, k: k == "clipboard"})()
+
+            def get_arguments(self):
+                return ["gobrush", "--clipboard"]
+
+            def create_file_for_arg(self, arg):
+                return Gio.File.new_for_path(arg)
+
+        with patch.object(MainWindow, "paste_from_clipboard") as mock_paste:
+            app.do_command_line(MockCommandLine())
+            mock_paste.assert_called_once()
+
+    def test_cli_clipboard_option_short(self) -> None:
+        app = _create_test_app()
+        app.register(None)
+
+        class MockCommandLine:
+            def get_options_dict(self):
+                return type("MockDict", (), {"contains": lambda self, k: False})()
+
+            def get_arguments(self):
+                return ["gobrush", "-c"]
+
+            def create_file_for_arg(self, arg):
+                return Gio.File.new_for_path(arg)
+
+        with patch.object(MainWindow, "paste_from_clipboard") as mock_paste:
+            app.do_command_line(MockCommandLine())
+            mock_paste.assert_called_once()
+
     def test_cli_positional_file_argument(self) -> None:
         app = _create_test_app()
         app.register(None)

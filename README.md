@@ -60,6 +60,14 @@ Open an image directly from the command line:
 ./bin/gobrush /path/to/image.png
 ```
 
+Or open directly with the image currently on your system clipboard:
+
+```bash
+./bin/gobrush --clipboard
+# or
+./bin/gobrush -c
+```
+
 ## Shortcuts
 
 | Shortcut / Gesture | Action |
