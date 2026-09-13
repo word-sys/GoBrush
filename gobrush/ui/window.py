@@ -91,17 +91,6 @@ class MainWindow(Adw.ApplicationWindow):
         if hasattr(self, "_action_scroll_to_zoom"):
             self._action_scroll_to_zoom.set_state(GLib.Variant.new_boolean(is_active))
 
-    def _activate_action(self, full_name: str) -> None:
-        app = self.get_application()
-        if full_name.startswith("app.") and app:
-            action = app.lookup_action(full_name[4:])
-            if action:
-                action.activate(None)
-        elif full_name.startswith("win."):
-            action = self.lookup_action(full_name[4:])
-            if action:
-                action.activate(None)
-
     def _build_header_actions(self) -> None:
         self.btn_open = Gtk.Button(
             label="Open",
@@ -227,30 +216,6 @@ class MainWindow(Adw.ApplicationWindow):
         self.switch_scroll_zoom.connect("notify::active", self._on_switch_scroll_zoom_active)
         scroll_box.append(self.switch_scroll_zoom)
         vbox.append(scroll_box)
-
-        vbox.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-
-        self.btn_menu_shortcuts = Gtk.Button()
-        self.btn_menu_shortcuts.add_css_class("flat")
-        box_shortcuts = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        box_shortcuts.append(Gtk.Label(label="Keyboard Shortcuts", xalign=0.0, hexpand=True))
-        self.btn_menu_shortcuts.set_child(box_shortcuts)
-        self.btn_menu_shortcuts.connect(
-            "clicked",
-            lambda _: (self._activate_action("app.shortcuts"), self.menu_popover.popdown()),
-        )
-        vbox.append(self.btn_menu_shortcuts)
-
-        self.btn_menu_about = Gtk.Button()
-        self.btn_menu_about.add_css_class("flat")
-        box_about = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        box_about.append(Gtk.Label(label="About GoBrush", xalign=0.0, hexpand=True))
-        self.btn_menu_about.set_child(box_about)
-        self.btn_menu_about.connect(
-            "clicked",
-            lambda _: (self._activate_action("app.about"), self.menu_popover.popdown()),
-        )
-        vbox.append(self.btn_menu_about)
 
         self.menu_popover.set_child(vbox)
 
