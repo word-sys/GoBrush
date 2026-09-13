@@ -52,6 +52,10 @@ class Canvas(Gtk.DrawingArea):
         self._is_pinching: bool = False
         self._last_gesture_scale: float = 1.0
 
+        self._image_pyramid: list[tuple[float, cairo.ImageSurface]] = []
+        self._is_interacting: bool = False
+        self._scroll_idle_source_id: int | None = None
+
         self._cursor_pos: tuple[float, float] | None = None
         self._motion_controller = Gtk.EventControllerMotion()
         self._motion_controller.connect("motion", self._on_motion_internal)
@@ -98,7 +102,7 @@ class Canvas(Gtk.DrawingArea):
         self.add_controller(self._focus_controller)
 
         self.connect("notify::scale-factor", self._on_scale_factor_changed)
-        self.connect("unmap", lambda *_: self._cancel_animation())
+        self.connect("unmap", self._on_unmap)
         self.set_draw_func(self._on_draw)
 
 
@@ -131,8 +135,25 @@ class Canvas(Gtk.DrawingArea):
             self._crisp_zoom = bool(enabled)
             self.queue_draw()
 
+    def _set_interacting(self, active: bool) -> None:
+        if self._is_interacting != active:
+            self._is_interacting = active
+            self.queue_draw()
+
+    def _on_scroll_idle(self) -> bool:
+        self._scroll_idle_source_id = None
+        self._set_interacting(False)
+        return False
+
+    def _on_unmap(self, *_) -> None:
+        self._cancel_animation()
+        if self._scroll_idle_source_id is not None:
+            GLib.source_remove(self._scroll_idle_source_id)
+            self._scroll_idle_source_id = None
+
     def get_active_filter(self) -> int:
-        # Nearest-neighbor when magnified prevents bilinear interpolation blur
+        if self._is_interacting:
+            return cairo.FILTER_FAST
         if self._crisp_zoom and self.zoom >= 1.0:
             return cairo.FILTER_NEAREST
         return cairo.FILTER_GOOD
@@ -508,6 +529,42 @@ class Canvas(Gtk.DrawingArea):
         self.queue_draw()
         self._notify_view_changed()
 
+    def _rebuild_pyramid(self) -> None:
+        self._image_pyramid.clear()
+        if self._image_surface is None or (self._image_width <= 1200 and self._image_height <= 1200):
+            return
+
+        w, h = self._image_width, self._image_height
+        curr_surf = self._image_surface
+        curr_scale = 1.0
+
+        scales = [0.5, 0.25]
+        if w > 3000 or h > 3000:
+            scales.append(0.125)
+
+        for target_scale in scales:
+            step_factor = target_scale / curr_scale
+            sw = max(1, int(round(w * target_scale)))
+            sh = max(1, int(round(h * target_scale)))
+            s_level = cairo.ImageSurface(cairo.FORMAT_ARGB32, sw, sh)
+            cr_lvl = cairo.Context(s_level)
+            cr_lvl.scale(step_factor, step_factor)
+            cr_lvl.set_source_surface(curr_surf, 0, 0)
+            cr_lvl.paint()
+            self._image_pyramid.append((target_scale, s_level))
+            curr_surf = s_level
+            curr_scale = target_scale
+
+    def _select_draw_surface(self, zoom: float) -> tuple[float, cairo.ImageSurface]:
+        if zoom >= 0.7 or not self._image_pyramid or self._image_surface is None:
+            return 1.0, self._image_surface
+
+        for p_scale, p_surf in sorted(self._image_pyramid, key=lambda p: p[0]):
+            if p_scale >= zoom * 0.7:
+                return p_scale, p_surf
+
+        return self._image_pyramid[0]
+
     def set_image_surface(
         self,
         surface: cairo.ImageSurface | None,
@@ -525,6 +582,8 @@ class Canvas(Gtk.DrawingArea):
             else:
                 self._image_has_alpha = surface.get_format() == cairo.FORMAT_ARGB32
 
+            self._rebuild_pyramid()
+
             vw = self.viewport_width
             vh = self.viewport_height
             if vw > 0 and vh > 0:
@@ -539,6 +598,7 @@ class Canvas(Gtk.DrawingArea):
             self._image_width = 0
             self._image_height = 0
             self._image_has_alpha = True
+            self._image_pyramid.clear()
             self.transform.reset()
             self._pending_fit = True
         self.queue_draw()
@@ -636,11 +696,17 @@ class Canvas(Gtk.DrawingArea):
                     cr.fill()
                     cr.restore()
 
+                p_scale, p_surf = self._select_draw_surface(self.zoom)
+
                 cr.save()
                 cr.rectangle(vx, vy, vw, vh)
                 cr.clip()
 
-                cr.set_source_surface(self._image_surface, 0, 0)
+                if p_scale != 1.0:
+                    inv = 1.0 / p_scale
+                    cr.scale(inv, inv)
+
+                cr.set_source_surface(p_surf, 0, 0)
                 pattern = cr.get_source()
                 if pattern is not None:
                     pattern.set_filter(self.get_active_filter())
@@ -680,6 +746,11 @@ class Canvas(Gtk.DrawingArea):
     def _on_scroll(
         self, controller: Gtk.EventControllerScroll, dx: float, dy: float
     ) -> bool:
+        self._set_interacting(True)
+        if self._scroll_idle_source_id is not None:
+            GLib.source_remove(self._scroll_idle_source_id)
+        self._scroll_idle_source_id = GLib.timeout_add(60, self._on_scroll_idle)
+
         state = controller.get_current_event_state()
         is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
         is_shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
@@ -724,6 +795,7 @@ class Canvas(Gtk.DrawingArea):
         self.grab_focus()
         self._cancel_animation()
         self._is_pinching = True
+        self._set_interacting(True)
         self._last_gesture_scale = 1.0
 
     def _on_zoom_gesture_scale_changed(
@@ -751,12 +823,14 @@ class Canvas(Gtk.DrawingArea):
     ) -> None:
         self._is_pinching = False
         self._last_gesture_scale = 1.0
+        self._set_interacting(False)
 
     def _on_zoom_gesture_cancel(
         self, gesture: Gtk.GestureZoom, sequence: Gdk.EventSequence | None
     ) -> None:
         self._is_pinching = False
         self._last_gesture_scale = 1.0
+        self._set_interacting(False)
 
     def handle_keyboard_zoom(self, keyval: int, state: Gdk.ModifierType) -> bool:
         is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
@@ -810,10 +884,11 @@ class Canvas(Gtk.DrawingArea):
     def _on_middle_drag_begin(
         self, gesture: Gtk.GestureDrag, start_x: float, start_y: float
     ) -> None:
-        self._pending_fit = False
         self.grab_focus()
+        self._pending_fit = False
         self._cancel_animation()
         self._is_panning = True
+        self._set_interacting(True)
         self._drag_start_pan = (self.transform.pan_x, self.transform.pan_y)
         self._update_cursor("grabbing")
 
@@ -830,12 +905,14 @@ class Canvas(Gtk.DrawingArea):
         if self._is_panning:
             self.set_pan(self._drag_start_pan[0] + offset_x, self._drag_start_pan[1] + offset_y)
             self._is_panning = False
+        self._set_interacting(False)
         self._update_cursor()
 
     def _on_middle_drag_cancel(
         self, gesture: Gtk.Gesture, sequence: Gdk.EventSequence | None
     ) -> None:
         self._is_panning = False
+        self._set_interacting(False)
         self._update_cursor()
 
     def _on_primary_drag_begin(
@@ -846,6 +923,7 @@ class Canvas(Gtk.DrawingArea):
             self._pending_fit = False
             self._cancel_animation()
             self._is_space_panning = True
+            self._set_interacting(True)
             self._drag_start_pan = (self.transform.pan_x, self.transform.pan_y)
             self._update_cursor("grabbing")
         else:
@@ -863,12 +941,14 @@ class Canvas(Gtk.DrawingArea):
         if self._is_space_panning:
             self.set_pan(self._drag_start_pan[0] + offset_x, self._drag_start_pan[1] + offset_y)
             self._is_space_panning = False
+        self._set_interacting(False)
         self._update_cursor()
 
     def _on_primary_drag_cancel(
         self, gesture: Gtk.Gesture, sequence: Gdk.EventSequence | None
     ) -> None:
         self._is_space_panning = False
+        self._set_interacting(False)
         self._update_cursor()
 
     def _on_focus_leave(self, controller: Gtk.EventControllerFocus) -> None:
