@@ -14,6 +14,12 @@ from gobrush.core.loader import (
     pil_to_cairo_surface_with_info,
     cairo_surface_to_pil,
 )
+from gobrush.core.history import (
+    Command,
+    AddAnnotationCommand,
+    DeleteAnnotationCommand,
+    CompoundCommand,
+)
 from gobrush.core.clipboard import (
     normalize_image_format,
     get_format_display_name,
@@ -26,6 +32,10 @@ __all__ = [
     "ViewportTransform",
     "create_checkerboard_pattern",
     "AnnotationDocument",
+    "Command",
+    "AddAnnotationCommand",
+    "DeleteAnnotationCommand",
+    "CompoundCommand",
     "ImageLoadError",
     "SUPPORTED_FORMATS",
     "is_supported_image",
