@@ -22,6 +22,7 @@ from gobrush.core.history import (
     MoveCommand,
     ResizeCommand,
     RestyleCommand,
+    UndoManager,
 )
 from gobrush.core.clipboard import (
     normalize_image_format,
@@ -42,6 +43,7 @@ __all__ = [
     "MoveCommand",
     "ResizeCommand",
     "RestyleCommand",
+    "UndoManager",
     "ImageLoadError",
     "SUPPORTED_FORMATS",
     "is_supported_image",

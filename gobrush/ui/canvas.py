@@ -9,6 +9,7 @@ from gi.repository import Gtk, Gdk, GLib
 from gobrush.core.transform import ViewportTransform
 from gobrush.core.checkerboard import create_checkerboard_pattern
 from gobrush.core.document import AnnotationDocument
+from gobrush.core.history import Command, UndoManager
 from gobrush.items.base import AnnotationItem
 
 
@@ -30,6 +31,8 @@ class Canvas(Gtk.DrawingArea):
         self.transform = ViewportTransform()
         self.document = AnnotationDocument()
         self.document.add_change_callback(self.queue_draw)
+        self.undo_manager = UndoManager()
+        self.undo_manager.add_change_callback(self.queue_draw)
         self._image_draw_hooks: list[Callable[[cairo.Context], None]] = []
         self._draw_hooks: list[Callable[[cairo.Context, int, int], None]] = []
 
@@ -611,7 +614,24 @@ class Canvas(Gtk.DrawingArea):
 
     def clear(self) -> None:
         self.document.clear()
+        self.undo_manager.clear()
         self.set_image_surface(None)
+
+    def execute_command(self, command: Command) -> None:
+        self.undo_manager.push(command, execute=True)
+        self.queue_draw()
+
+    def undo(self) -> bool:
+        res = self.undo_manager.undo()
+        if res:
+            self.queue_draw()
+        return res
+
+    def redo(self) -> bool:
+        res = self.undo_manager.redo()
+        if res:
+            self.queue_draw()
+        return res
 
     def get_flattened_surface(self) -> cairo.ImageSurface | None:
         if not self.has_image or self._image_width <= 0 or self._image_height <= 0:

@@ -50,10 +50,12 @@ class MainWindow(Adw.ApplicationWindow):
         self.canvas_view = CanvasView()
         self.canvas = self.canvas_view.canvas
         self.status_bar = self.canvas_view.status_bar
+        self.undo_manager = self.canvas.undo_manager
 
         self._build_actions()
         self._build_menu()
         self._build_header_actions()
+        self.undo_manager.add_change_callback(self._update_undo_redo_ui)
 
         self.empty_state = EmptyStateView(
             on_open=self._on_open_action,
@@ -94,6 +96,16 @@ class MainWindow(Adw.ApplicationWindow):
         self._action_copy = Gio.SimpleAction.new("copy-clipboard", None)
         self._action_copy.connect("activate", lambda *_: self.copy_to_clipboard())
         self.add_action(self._action_copy)
+
+        self._action_undo = Gio.SimpleAction.new("undo", None)
+        self._action_undo.connect("activate", lambda *_: self.undo())
+        self._action_undo.set_enabled(False)
+        self.add_action(self._action_undo)
+
+        self._action_redo = Gio.SimpleAction.new("redo", None)
+        self._action_redo.connect("activate", lambda *_: self.redo())
+        self._action_redo.set_enabled(False)
+        self.add_action(self._action_redo)
 
     def _on_scroll_to_zoom_changed(self, action: Gio.SimpleAction, value: GLib.Variant) -> None:
         action.set_state(value)
@@ -136,6 +148,7 @@ class MainWindow(Adw.ApplicationWindow):
             tooltip_text="Undo (Ctrl+Z)",
             sensitive=False,
         )
+        self.btn_undo.connect("clicked", lambda _: self.undo())
         self.header_bar.pack_start(self.btn_undo)
 
         self.btn_redo = Gtk.Button(
@@ -143,6 +156,7 @@ class MainWindow(Adw.ApplicationWindow):
             tooltip_text="Redo (Ctrl+Shift+Z / Ctrl+Y)",
             sensitive=False,
         )
+        self.btn_redo.connect("clicked", lambda _: self.redo())
         self.header_bar.pack_start(self.btn_redo)
 
         self.btn_copy = Gtk.Button(
@@ -280,9 +294,31 @@ class MainWindow(Adw.ApplicationWindow):
 
     def set_undo_sensitive(self, sensitive: bool) -> None:
         self.btn_undo.set_sensitive(sensitive)
+        if hasattr(self, "_action_undo"):
+            self._action_undo.set_enabled(sensitive)
 
     def set_redo_sensitive(self, sensitive: bool) -> None:
         self.btn_redo.set_sensitive(sensitive)
+        if hasattr(self, "_action_redo"):
+            self._action_redo.set_enabled(sensitive)
+
+    def _update_undo_redo_ui(self) -> None:
+        can_undo = self.undo_manager.can_undo
+        can_redo = self.undo_manager.can_redo
+        self.set_undo_sensitive(can_undo)
+        self.set_redo_sensitive(can_redo)
+        cmd_name = self.undo_manager.undo_command_name
+        self.btn_undo.set_tooltip_text(f"Undo {cmd_name} (Ctrl+Z)" if cmd_name else "Undo (Ctrl+Z)")
+        cmd_name = self.undo_manager.redo_command_name
+        self.btn_redo.set_tooltip_text(
+            f"Redo {cmd_name} (Ctrl+Shift+Z / Ctrl+Y)" if cmd_name else "Redo (Ctrl+Shift+Z / Ctrl+Y)"
+        )
+
+    def undo(self) -> bool:
+        return self.canvas.undo()
+
+    def redo(self) -> bool:
+        return self.canvas.redo()
 
     def show_toast(self, title: str, timeout: int = 2) -> Adw.Toast:
         escaped_title = GLib.markup_escape_text(str(title))
@@ -374,6 +410,7 @@ class MainWindow(Adw.ApplicationWindow):
             surface.get_height(),
             has_alpha=has_alpha,
         )
+        self.undo_manager.clear()
         self.show_canvas()
         self.canvas.zoom_fit()
         self._current_file_path = file_path
@@ -646,6 +683,17 @@ class MainWindow(Adw.ApplicationWindow):
         if is_ctrl and keyval in (Gdk.KEY_c, Gdk.KEY_C):
             self.copy_to_clipboard()
             return True
+
+        is_shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
+
+        if is_ctrl and is_shift and keyval in (Gdk.KEY_z, Gdk.KEY_Z):
+            return self.redo()
+
+        if is_ctrl and not is_shift and keyval in (Gdk.KEY_z, Gdk.KEY_Z):
+            return self.undo()
+
+        if is_ctrl and keyval in (Gdk.KEY_y, Gdk.KEY_Y):
+            return self.redo()
 
         if not self.is_empty():
             return self.canvas.handle_key_pressed(keyval, state)

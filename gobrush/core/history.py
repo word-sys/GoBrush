@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from gobrush.core.document import AnnotationDocument
@@ -263,4 +263,91 @@ class RestyleCommand(Command):
 
     def redo(self) -> None:
         self.execute()
+
+
+class UndoManager:
+    def __init__(self, max_history: int = 100) -> None:
+        self._max_history: int = max(1, int(max_history))
+        self._undo_stack: list[Command] = []
+        self._redo_stack: list[Command] = []
+        self._callbacks: list[Callable[[], None]] = []
+
+    @property
+    def max_history(self) -> int:
+        return self._max_history
+
+    @property
+    def can_undo(self) -> bool:
+        return len(self._undo_stack) > 0
+
+    @property
+    def can_redo(self) -> bool:
+        return len(self._redo_stack) > 0
+
+    @property
+    def undo_count(self) -> int:
+        return len(self._undo_stack)
+
+    @property
+    def redo_count(self) -> int:
+        return len(self._redo_stack)
+
+    @property
+    def undo_command_name(self) -> str | None:
+        return self._undo_stack[-1].name if self._undo_stack else None
+
+    @property
+    def redo_command_name(self) -> str | None:
+        return self._redo_stack[-1].name if self._redo_stack else None
+
+    def push(self, command: Command, execute: bool = False) -> None:
+        if execute:
+            command.execute()
+
+        if self._undo_stack and self._undo_stack[-1].merge_with(command):
+            pass
+        else:
+            self._undo_stack.append(command)
+            if len(self._undo_stack) > self._max_history:
+                self._undo_stack.pop(0)
+
+        self._redo_stack.clear()
+        self._notify()
+
+    def undo(self) -> bool:
+        if not self._undo_stack:
+            return False
+        cmd = self._undo_stack.pop()
+        cmd.undo()
+        self._redo_stack.append(cmd)
+        self._notify()
+        return True
+
+    def redo(self) -> bool:
+        if not self._redo_stack:
+            return False
+        cmd = self._redo_stack.pop()
+        cmd.redo()
+        self._undo_stack.append(cmd)
+        self._notify()
+        return True
+
+    def clear(self) -> None:
+        if self._undo_stack or self._redo_stack:
+            self._undo_stack.clear()
+            self._redo_stack.clear()
+            self._notify()
+
+    def add_change_callback(self, cb: Callable[[], None]) -> None:
+        if cb not in self._callbacks:
+            self._callbacks.append(cb)
+
+    def remove_change_callback(self, cb: Callable[[], None]) -> None:
+        if cb in self._callbacks:
+            self._callbacks.remove(cb)
+
+    def _notify(self) -> None:
+        for cb in self._callbacks:
+            cb()
+
 
