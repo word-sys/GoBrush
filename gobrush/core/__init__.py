@@ -1,6 +1,7 @@
 from __future__ import annotations
 from gobrush.core.transform import ViewportTransform
 from gobrush.core.checkerboard import create_checkerboard_pattern
+from gobrush.core.document import AnnotationDocument
 from gobrush.core.loader import (
     ImageLoadError,
     SUPPORTED_FORMATS,
@@ -24,6 +25,7 @@ from gobrush.core.clipboard import (
 __all__ = [
     "ViewportTransform",
     "create_checkerboard_pattern",
+    "AnnotationDocument",
     "ImageLoadError",
     "SUPPORTED_FORMATS",
     "is_supported_image",

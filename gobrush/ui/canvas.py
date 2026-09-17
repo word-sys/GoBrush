@@ -8,6 +8,8 @@ from gi.repository import Gtk, Gdk, GLib
 
 from gobrush.core.transform import ViewportTransform
 from gobrush.core.checkerboard import create_checkerboard_pattern
+from gobrush.core.document import AnnotationDocument
+from gobrush.items.base import AnnotationItem
 
 
 class Canvas(Gtk.DrawingArea):
@@ -26,6 +28,8 @@ class Canvas(Gtk.DrawingArea):
         self._pending_fit: bool = True
 
         self.transform = ViewportTransform()
+        self.document = AnnotationDocument()
+        self.document.add_change_callback(self.queue_draw)
         self._image_draw_hooks: list[Callable[[cairo.Context], None]] = []
         self._draw_hooks: list[Callable[[cairo.Context, int, int], None]] = []
 
@@ -574,6 +578,7 @@ class Canvas(Gtk.DrawingArea):
     ) -> None:
         self._cancel_animation()
         self._image_surface = surface
+        self.document.set_background(surface, width=width, height=height, has_alpha=has_alpha)
         if surface is not None:
             self._image_width = width if width is not None else surface.get_width()
             self._image_height = height if height is not None else surface.get_height()
@@ -605,25 +610,27 @@ class Canvas(Gtk.DrawingArea):
         self._notify_view_changed()
 
     def clear(self) -> None:
+        self.document.clear()
         self.set_image_surface(None)
 
     def get_flattened_surface(self) -> cairo.ImageSurface | None:
         if not self.has_image or self._image_width <= 0 or self._image_height <= 0:
             return None
 
-        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self._image_width, self._image_height)
-        cr = cairo.Context(surface)
+        surface = self.document.render_to_surface(include_background=True)
 
-        if self._image_surface is not None:
-            cr.set_source_surface(self._image_surface, 0, 0)
-            cr.paint()
-
-        for hook in self._image_draw_hooks:
-            cr.save()
-            hook(cr)
-            cr.restore()
+        if self._image_draw_hooks:
+            cr = cairo.Context(surface)
+            for hook in self._image_draw_hooks:
+                cr.save()
+                hook(cr)
+                cr.restore()
 
         return surface
+
+    @property
+    def items(self) -> list[AnnotationItem]:
+        return self.document.items
 
     def add_image_draw_hook(self, hook: Callable[[cairo.Context], None]) -> None:
         if hook not in self._image_draw_hooks:
@@ -719,6 +726,8 @@ class Canvas(Gtk.DrawingArea):
                 cr.rectangle(0, 0, self._image_width, self._image_height)
                 cr.stroke()
                 cr.restore()
+
+        self.document.draw(cr, scale=self.zoom, draw_selection_handles=True)
 
         for hook in self._image_draw_hooks:
             cr.save()
