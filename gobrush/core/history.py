@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from gobrush.core.document import AnnotationDocument
@@ -119,3 +119,148 @@ class CompoundCommand(Command):
 
     def __len__(self) -> int:
         return len(self.commands)
+
+
+class MoveCommand(Command):
+    def __init__(
+        self,
+        items: AnnotationItem | list[AnnotationItem],
+        dx: float,
+        dy: float,
+        document: AnnotationDocument | None = None,
+        name: str = "Move Annotation",
+    ) -> None:
+        self.items: list[AnnotationItem] = [items] if hasattr(items, "item_id") else list(items)
+        self.dx = float(dx)
+        self.dy = float(dy)
+        self.document = document
+        self.name = name
+
+    def execute(self) -> None:
+        for it in self.items:
+            it.move_by(self.dx, self.dy)
+        if self.document is not None:
+            self.document.mark_dirty()
+
+    def undo(self) -> None:
+        for it in self.items:
+            it.move_by(-self.dx, -self.dy)
+        if self.document is not None:
+            self.document.mark_dirty()
+
+    def redo(self) -> None:
+        self.execute()
+
+    def merge_with(self, other: Command) -> bool:
+        if isinstance(other, MoveCommand) and self.items == other.items and self.document is other.document:
+            self.dx += other.dx
+            self.dy += other.dy
+            return True
+        return False
+
+
+class ResizeCommand(Command):
+    def __init__(
+        self,
+        item: AnnotationItem,
+        old_geometry: Any,
+        new_geometry: Any,
+        document: AnnotationDocument | None = None,
+        name: str = "Resize Annotation",
+    ) -> None:
+        self.item = item
+        self.old_geometry = old_geometry
+        self.new_geometry = new_geometry
+        self.document = document
+        self.name = name
+
+    def _apply(self, geometry: Any) -> None:
+        if callable(geometry):
+            geometry(self.item)
+        elif hasattr(self.item, "set_geometry") and callable(self.item.set_geometry):
+            handled = self.item.set_geometry(geometry)
+            if not handled:
+                if isinstance(geometry, dict):
+                    for k, v in geometry.items():
+                        if hasattr(self.item, k):
+                            setattr(self.item, k, v)
+                elif isinstance(geometry, (tuple, list)):
+                    if len(geometry) == 4 and all(hasattr(self.item, attr) for attr in ("x", "y", "w", "h")):
+                        self.item.x, self.item.y, self.item.w, self.item.h = geometry
+                    elif hasattr(self.item, "set_bounds") and callable(self.item.set_bounds):
+                        self.item.set_bounds(*geometry)
+        elif isinstance(geometry, dict):
+            for k, v in geometry.items():
+                if hasattr(self.item, k):
+                    setattr(self.item, k, v)
+        elif isinstance(geometry, (tuple, list)):
+            if len(geometry) == 4 and all(hasattr(self.item, attr) for attr in ("x", "y", "w", "h")):
+                self.item.x, self.item.y, self.item.w, self.item.h = geometry
+            elif hasattr(self.item, "set_bounds") and callable(self.item.set_bounds):
+                self.item.set_bounds(*geometry)
+        if self.document is not None:
+            self.document.mark_dirty()
+
+    def execute(self) -> None:
+        self._apply(self.new_geometry)
+
+    def undo(self) -> None:
+        self._apply(self.old_geometry)
+
+    def redo(self) -> None:
+        self._apply(self.new_geometry)
+
+    def merge_with(self, other: Command) -> bool:
+        if isinstance(other, ResizeCommand) and self.item is other.item and self.document is other.document:
+            self.new_geometry = other.new_geometry
+            return True
+        return False
+
+
+class RestyleCommand(Command):
+    def __init__(
+        self,
+        items: AnnotationItem | list[AnnotationItem],
+        stroke_color: tuple[float, float, float, float] | None = None,
+        stroke_width: float | None = None,
+        fill_color: tuple[float, float, float, float] | None = None,
+        clear_fill: bool = False,
+        document: AnnotationDocument | None = None,
+        name: str = "Change Style",
+    ) -> None:
+        self.items: list[AnnotationItem] = [items] if hasattr(items, "item_id") else list(items)
+        self.stroke_color = stroke_color
+        self.stroke_width = stroke_width
+        self.fill_color = fill_color
+        self.clear_fill = clear_fill
+        self.document = document
+        self.name = name
+        self._previous_styles: list[
+            tuple[AnnotationItem, tuple[float, float, float, float], float, tuple[float, float, float, float] | None]
+        ] = [
+            (it, it.stroke_color, it.stroke_width, it.fill_color)
+            for it in self.items
+        ]
+
+    def execute(self) -> None:
+        for it in self.items:
+            it.apply_style(
+                stroke_color=self.stroke_color,
+                stroke_width=self.stroke_width,
+                fill_color=self.fill_color,
+                clear_fill=self.clear_fill,
+            )
+        if self.document is not None:
+            self.document.mark_dirty()
+
+    def undo(self) -> None:
+        for it, stroke_color, stroke_width, fill_color in self._previous_styles:
+            it.stroke_color = stroke_color
+            it.stroke_width = stroke_width
+            it.fill_color = fill_color
+        if self.document is not None:
+            self.document.mark_dirty()
+
+    def redo(self) -> None:
+        self.execute()
+

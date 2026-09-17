@@ -114,6 +114,24 @@ class AnnotationItem(ABC):
         """Return a deep copy of this annotation item with a new unique ID."""
         raise NotImplementedError
 
+    def get_geometry(self) -> Any:
+        return self.get_bounds()
+
+    def set_geometry(self, geometry: Any) -> bool:
+        if isinstance(geometry, dict):
+            for k, v in geometry.items():
+                if hasattr(self, k):
+                    setattr(self, k, v)
+            return True
+        elif isinstance(geometry, (tuple, list)):
+            if len(geometry) == 4 and all(hasattr(self, attr) for attr in ("x", "y", "w", "h")):
+                self.x, self.y, self.w, self.h = geometry
+                return True
+            elif hasattr(self, "set_bounds") and callable(getattr(self, "set_bounds")):
+                getattr(self, "set_bounds")(*geometry)
+                return True
+        return False
+
     # -------------------------------------------------------------------------
     # Selection & Handles Protocol
     # -------------------------------------------------------------------------

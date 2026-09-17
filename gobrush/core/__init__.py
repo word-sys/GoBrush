@@ -19,6 +19,9 @@ from gobrush.core.history import (
     AddAnnotationCommand,
     DeleteAnnotationCommand,
     CompoundCommand,
+    MoveCommand,
+    ResizeCommand,
+    RestyleCommand,
 )
 from gobrush.core.clipboard import (
     normalize_image_format,
@@ -36,6 +39,9 @@ __all__ = [
     "AddAnnotationCommand",
     "DeleteAnnotationCommand",
     "CompoundCommand",
+    "MoveCommand",
+    "ResizeCommand",
+    "RestyleCommand",
     "ImageLoadError",
     "SUPPORTED_FORMATS",
     "is_supported_image",
