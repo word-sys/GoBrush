@@ -82,6 +82,7 @@ Or open directly with the image currently on your system clipboard:
 | `F` / `Ctrl + 9` | Fit Image to Window |
 | `Arrow Keys` (`Left`, `Right`, `Up`, `Down`) | Pan viewport (hold `Shift` for 3x speed) |
 | `Two-Finger Pinch (Trackpad)` | Smooth pinch zoom centered on pinch focus |
+| `Ctrl + N` | New canvas / picture creation dialog |
 | `Ctrl + O` | Open image file |
 | `Ctrl + S` | Save image |
 | `Ctrl + C` | Copy flattened image to clipboard |

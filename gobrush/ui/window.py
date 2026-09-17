@@ -22,6 +22,7 @@ from gobrush.core.clipboard import (
 from gobrush.ui.empty_state import EmptyStateView
 from gobrush.ui.canvas import Canvas
 from gobrush.ui.canvas_view import CanvasView
+from gobrush.ui.new_dialog import NewCanvasDialog
 
 
 class MainWindow(Adw.ApplicationWindow):
@@ -57,6 +58,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.empty_state = EmptyStateView(
             on_open=self._on_open_action,
             on_paste=self._on_paste_action,
+            on_new=self.show_new_canvas_dialog,
         )
         self.show_empty_state()
 
@@ -73,6 +75,10 @@ class MainWindow(Adw.ApplicationWindow):
         self.add_controller(self._drop_target)
 
     def _build_actions(self) -> None:
+        self._action_new = Gio.SimpleAction.new("new-canvas", None)
+        self._action_new.connect("activate", lambda *_: self.show_new_canvas_dialog())
+        self.add_action(self._action_new)
+
         self._action_scroll_to_zoom = Gio.SimpleAction.new_stateful(
             "scroll-to-zoom",
             None,
@@ -103,6 +109,13 @@ class MainWindow(Adw.ApplicationWindow):
             self._action_scroll_to_zoom.set_state(GLib.Variant.new_boolean(is_active))
 
     def _build_header_actions(self) -> None:
+        self.btn_new = Gtk.Button(
+            label="New",
+            tooltip_text="New Canvas (Ctrl+N)",
+        )
+        self.btn_new.connect("clicked", lambda _: self.show_new_canvas_dialog())
+        self.header_bar.pack_start(self.btn_new)
+
         self.btn_open = Gtk.Button(
             label="Open",
             tooltip_text="Open Image (Ctrl+O)",
@@ -202,6 +215,22 @@ class MainWindow(Adw.ApplicationWindow):
 
         vbox.append(presets_grid)
         vbox.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        self.btn_menu_new = Gtk.Button()
+        self.btn_menu_new.add_css_class("flat")
+        new_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        new_box.append(Gtk.Image.new_from_icon_name("document-new-symbolic"))
+        lbl_new = Gtk.Label(label="New Canvas...", xalign=0.0, hexpand=True)
+        new_box.append(lbl_new)
+        lbl_new_accel = Gtk.Label(label="Ctrl+N")
+        lbl_new_accel.add_css_class("dim-label")
+        new_box.append(lbl_new_accel)
+        self.btn_menu_new.set_child(new_box)
+        self.btn_menu_new.connect(
+            "clicked",
+            lambda _: (self.show_new_canvas_dialog(), self.menu_popover.popdown()),
+        )
+        vbox.append(self.btn_menu_new)
 
         self.btn_menu_paste = Gtk.Button()
         self.btn_menu_paste.add_css_class("flat")
@@ -307,8 +336,29 @@ class MainWindow(Adw.ApplicationWindow):
         return self._action_paste
 
     @property
+    def action_new(self) -> Gio.SimpleAction:
+        return self._action_new
+
+    @property
     def action_copy(self) -> Gio.SimpleAction:
         return self._action_copy
+
+    def show_new_canvas_dialog(self) -> NewCanvasDialog:
+        def _on_canvas_created(
+            surface: cairo.ImageSurface, has_alpha: bool, width: int, height: int
+        ) -> None:
+            self.load_surface(
+                surface,
+                has_alpha=has_alpha,
+                title="Untitled - GoBrush",
+                file_path=None,
+                image_format="png",
+            )
+            self.show_toast(f"Created new canvas ({width} × {height})")
+
+        dlg = NewCanvasDialog(parent=self, on_create=_on_canvas_created)
+        dlg.present()
+        return dlg
 
     def load_surface(
         self,
@@ -581,6 +631,10 @@ class MainWindow(Adw.ApplicationWindow):
         self, controller: Gtk.EventControllerKey, keyval: int, keycode: int, state: Gdk.ModifierType
     ) -> bool:
         is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK) and not bool(state & Gdk.ModifierType.ALT_MASK)
+        if is_ctrl and keyval in (Gdk.KEY_n, Gdk.KEY_N):
+            self.show_new_canvas_dialog()
+            return True
+
         if is_ctrl and keyval in (Gdk.KEY_o, Gdk.KEY_O):
             self._on_open_action()
             return True

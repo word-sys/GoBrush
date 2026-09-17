@@ -12,10 +12,12 @@ class EmptyStateView(Adw.Bin):
         self,
         on_open: Callable[[], None] | None = None,
         on_paste: Callable[[], None] | None = None,
+        on_new: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self.on_open = on_open
         self.on_paste = on_paste
+        self.on_new = on_new
 
         root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
@@ -30,8 +32,15 @@ class EmptyStateView(Adw.Bin):
         btn_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         btn_box.set_halign(Gtk.Align.CENTER)
 
+        self.btn_new = Gtk.Button(label="New Canvas...")
+        self.btn_new.add_css_class("suggested-action")
+        self.btn_new.add_css_class("pill")
+        self.btn_new.set_size_request(200, 40)
+        if on_new:
+            self.btn_new.connect("clicked", lambda _: on_new())
+        btn_box.append(self.btn_new)
+
         self.btn_open = Gtk.Button(label="Open File...")
-        self.btn_open.add_css_class("suggested-action")
         self.btn_open.add_css_class("pill")
         self.btn_open.set_size_request(200, 40)
         if on_open:
