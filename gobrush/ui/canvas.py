@@ -11,6 +11,7 @@ from gobrush.core.checkerboard import create_checkerboard_pattern
 from gobrush.core.document import AnnotationDocument
 from gobrush.core.history import Command, UndoManager
 from gobrush.items.base import AnnotationItem
+from gobrush.tools.base import ToolManager, SelectTool
 
 
 class Canvas(Gtk.DrawingArea):
@@ -33,6 +34,8 @@ class Canvas(Gtk.DrawingArea):
         self.document.add_change_callback(self.queue_draw)
         self.undo_manager = UndoManager()
         self.undo_manager.add_change_callback(self.queue_draw)
+        self.tool_manager = ToolManager(self)
+        self._drag_start_screen: tuple[float, float] = (0.0, 0.0)
         self._image_draw_hooks: list[Callable[[cairo.Context], None]] = []
         self._draw_hooks: list[Callable[[cairo.Context, int, int], None]] = []
 
@@ -748,12 +751,15 @@ class Canvas(Gtk.DrawingArea):
                 cr.restore()
 
         self.document.draw(cr, scale=self.zoom, draw_selection_handles=True)
+        self.tool_manager.draw_overlay(cr)
 
         for hook in self._image_draw_hooks:
             cr.save()
             hook(cr)
             cr.restore()
         cr.restore()
+
+        self.tool_manager.draw_screen_overlay(cr, width, height)
 
         for hook in self._draw_hooks:
             cr.save()
@@ -768,9 +774,15 @@ class Canvas(Gtk.DrawingArea):
         self, controller: Gtk.EventControllerMotion, x: float, y: float
     ) -> None:
         self._cursor_pos = (x, y)
+        if not (self._is_panning or self._is_space_panning):
+            ix, iy = self.screen_to_image(x, y)
+            state = controller.get_current_event_state() if hasattr(controller, "get_current_event_state") else Gdk.ModifierType(0)
+            self.tool_manager.handle_motion(ix, iy, x, y, state)
 
     def _on_leave_internal(self, controller: Gtk.EventControllerMotion) -> None:
         self._cursor_pos = None
+        if not (self._is_panning or self._is_space_panning):
+            self.tool_manager.handle_cancel()
 
     def _on_scroll(
         self, controller: Gtk.EventControllerScroll, dx: float, dy: float
@@ -948,6 +960,7 @@ class Canvas(Gtk.DrawingArea):
         self, gesture: Gtk.GestureDrag, start_x: float, start_y: float
     ) -> None:
         self.grab_focus()
+        self._drag_start_screen = (start_x, start_y)
         if self._space_pressed or (self._drag_to_pan and self._tool_cursor_name is None):
             self._pending_fit = False
             self._cancel_animation()
@@ -957,12 +970,22 @@ class Canvas(Gtk.DrawingArea):
             self._update_cursor("grabbing")
         else:
             self._is_space_panning = False
+            ix, iy = self.screen_to_image(start_x, start_y)
+            state = gesture.get_current_event_state() if hasattr(gesture, "get_current_event_state") else Gdk.ModifierType(0)
+            self.tool_manager.handle_press(ix, iy, start_x, start_y, state)
 
     def _on_primary_drag_update(
         self, gesture: Gtk.GestureDrag, offset_x: float, offset_y: float
     ) -> None:
         if self._is_space_panning:
             self.set_pan(self._drag_start_pan[0] + offset_x, self._drag_start_pan[1] + offset_y)
+        else:
+            curr_x = self._drag_start_screen[0] + offset_x
+            curr_y = self._drag_start_screen[1] + offset_y
+            ix, iy = self.screen_to_image(curr_x, curr_y)
+            zoom = self.zoom if self.zoom > 0 else 1.0
+            state = gesture.get_current_event_state() if hasattr(gesture, "get_current_event_state") else Gdk.ModifierType(0)
+            self.tool_manager.handle_drag(ix, iy, offset_x / zoom, offset_y / zoom, curr_x, curr_y, state)
 
     def _on_primary_drag_end(
         self, gesture: Gtk.GestureDrag, offset_x: float, offset_y: float
@@ -970,13 +993,22 @@ class Canvas(Gtk.DrawingArea):
         if self._is_space_panning:
             self.set_pan(self._drag_start_pan[0] + offset_x, self._drag_start_pan[1] + offset_y)
             self._is_space_panning = False
+        else:
+            curr_x = self._drag_start_screen[0] + offset_x
+            curr_y = self._drag_start_screen[1] + offset_y
+            ix, iy = self.screen_to_image(curr_x, curr_y)
+            state = gesture.get_current_event_state() if hasattr(gesture, "get_current_event_state") else Gdk.ModifierType(0)
+            self.tool_manager.handle_release(ix, iy, curr_x, curr_y, state)
         self._set_interacting(False)
         self._update_cursor()
 
     def _on_primary_drag_cancel(
         self, gesture: Gtk.Gesture, sequence: Gdk.EventSequence | None
     ) -> None:
-        self._is_space_panning = False
+        if self._is_space_panning:
+            self._is_space_panning = False
+        else:
+            self.tool_manager.handle_cancel()
         self._set_interacting(False)
         self._update_cursor()
 
@@ -986,6 +1018,9 @@ class Canvas(Gtk.DrawingArea):
             self._update_cursor()
 
     def handle_key_pressed(self, keyval: int, state: Gdk.ModifierType) -> bool:
+        if self.tool_manager.handle_key_pressed(keyval, state):
+            return True
+
         if keyval == Gdk.KEY_space:
             if not self._space_pressed:
                 self._space_pressed = True
@@ -1011,6 +1046,9 @@ class Canvas(Gtk.DrawingArea):
         return self.handle_keyboard_zoom(keyval, state)
 
     def handle_key_released(self, keyval: int, state: Gdk.ModifierType) -> bool:
+        if self.tool_manager.handle_key_released(keyval, state):
+            return True
+
         if keyval == Gdk.KEY_space:
             self._space_pressed = False
             if not (self._is_panning or self._is_space_panning):

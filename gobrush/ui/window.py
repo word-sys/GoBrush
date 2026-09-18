@@ -532,7 +532,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         try:
             fmt = target_format or self._current_format
-            has_annotations = bool(getattr(self.canvas, "_image_draw_hooks", None))
+            has_annotations = bool(getattr(self.canvas.document, "items", None)) or bool(getattr(self.canvas, "_image_draw_hooks", None))
             content_provider, display_name = create_clipboard_content_provider(
                 surface=surface,
                 fmt=fmt,

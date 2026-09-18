@@ -1,0 +1,214 @@
+from __future__ import annotations
+from abc import ABC
+from typing import TYPE_CHECKING, Callable
+import cairo
+import gi
+
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gdk
+
+if TYPE_CHECKING:
+    from gobrush.ui.canvas import Canvas
+
+
+class BaseTool(ABC):
+    tool_id: str = "base"
+    name: str = "Base Tool"
+    cursor_name: str | None = "default"
+
+    def __init__(self, canvas: Canvas | None = None) -> None:
+        self.canvas: Canvas | None = canvas
+        self.is_active: bool = False
+
+    def activate(self) -> None:
+        self.is_active = True
+
+    def deactivate(self) -> None:
+        self.is_active = False
+
+    def on_press(
+        self, ix: float, iy: float, sx: float, sy: float, state: Gdk.ModifierType
+    ) -> bool:
+        return False
+
+    def on_drag(
+        self, ix: float, iy: float, dx: float, dy: float, sx: float, sy: float, state: Gdk.ModifierType
+    ) -> bool:
+        return False
+
+    def on_release(
+        self, ix: float, iy: float, sx: float, sy: float, state: Gdk.ModifierType
+    ) -> bool:
+        return False
+
+    def on_cancel(self) -> None:
+        pass
+
+    def on_motion(
+        self, ix: float, iy: float, sx: float, sy: float, state: Gdk.ModifierType
+    ) -> bool:
+        return False
+
+    def on_key_pressed(self, keyval: int, state: Gdk.ModifierType) -> bool:
+        return False
+
+    def on_key_released(self, keyval: int, state: Gdk.ModifierType) -> bool:
+        return False
+
+    def draw_overlay(self, cr: cairo.Context) -> None:
+        pass
+
+    def draw_screen_overlay(self, cr: cairo.Context, width: int, height: int) -> None:
+        pass
+
+
+class SelectTool(BaseTool):
+    tool_id: str = "select"
+    name: str = "Select"
+    cursor_name: str | None = "default"
+
+
+class ToolManager:
+    def __init__(self, canvas: Canvas | None = None) -> None:
+        self.canvas: Canvas | None = canvas
+        self._tools: dict[str, BaseTool] = {}
+        self._active_tool: BaseTool | None = None
+        self._tool_changed_callbacks: list[Callable[[BaseTool | None], None]] = []
+        self._is_dragging: bool = False
+
+    @property
+    def active_tool(self) -> BaseTool | None:
+        return self._active_tool
+
+    @property
+    def active_tool_id(self) -> str | None:
+        return self._active_tool.tool_id if self._active_tool else None
+
+    @property
+    def is_dragging(self) -> bool:
+        return self._is_dragging
+
+    @property
+    def tools(self) -> dict[str, BaseTool]:
+        return dict(self._tools)
+
+    def register_tool(self, tool: BaseTool) -> None:
+        tool.canvas = self.canvas
+        self._tools[tool.tool_id] = tool
+
+    def get_tool(self, tool_id: str) -> BaseTool | None:
+        return self._tools.get(tool_id)
+
+    def set_active_tool(self, tool_or_id: str | BaseTool | None) -> bool:
+        new_tool: BaseTool | None = None
+        if tool_or_id is None:
+            new_tool = None
+        elif isinstance(tool_or_id, str):
+            if tool_or_id not in self._tools:
+                return False
+            new_tool = self._tools[tool_or_id]
+        elif isinstance(tool_or_id, BaseTool):
+            new_tool = tool_or_id
+            if new_tool.tool_id not in self._tools:
+                self.register_tool(new_tool)
+        else:
+            return False
+
+        if self._active_tool is new_tool:
+            return True
+
+        if self._is_dragging:
+            self.handle_cancel()
+
+        if self._active_tool is not None:
+            self._active_tool.deactivate()
+
+        self._active_tool = new_tool
+
+        if self._active_tool is not None:
+            self._active_tool.activate()
+            if self.canvas is not None:
+                self.canvas.tool_cursor_name = self._active_tool.cursor_name
+        else:
+            if self.canvas is not None:
+                self.canvas.tool_cursor_name = None
+
+        if self.canvas is not None:
+            self.canvas.queue_draw()
+
+        for cb in self._tool_changed_callbacks:
+            cb(self._active_tool)
+
+        return True
+
+    def add_tool_changed_callback(self, cb: Callable[[BaseTool | None], None]) -> None:
+        if cb not in self._tool_changed_callbacks:
+            self._tool_changed_callbacks.append(cb)
+
+    def remove_tool_changed_callback(self, cb: Callable[[BaseTool | None], None]) -> None:
+        if cb in self._tool_changed_callbacks:
+            self._tool_changed_callbacks.remove(cb)
+
+    def handle_press(
+        self, ix: float, iy: float, sx: float, sy: float, state: Gdk.ModifierType
+    ) -> bool:
+        self._is_dragging = True
+        if self._active_tool is not None:
+            return self._active_tool.on_press(ix, iy, sx, sy, state)
+        return False
+
+    def handle_drag(
+        self, ix: float, iy: float, dx: float, dy: float, sx: float, sy: float, state: Gdk.ModifierType
+    ) -> bool:
+        if self._active_tool is not None and self._is_dragging:
+            return self._active_tool.on_drag(ix, iy, dx, dy, sx, sy, state)
+        return False
+
+    def handle_release(
+        self, ix: float, iy: float, sx: float, sy: float, state: Gdk.ModifierType
+    ) -> bool:
+        was_dragging = self._is_dragging
+        self._is_dragging = False
+        if self._active_tool is not None and was_dragging:
+            return self._active_tool.on_release(ix, iy, sx, sy, state)
+        return False
+
+    def handle_cancel(self) -> None:
+        if self._is_dragging:
+            self._is_dragging = False
+            if self._active_tool is not None:
+                self._active_tool.on_cancel()
+            if self.canvas is not None:
+                self.canvas.queue_draw()
+
+    def handle_motion(
+        self, ix: float, iy: float, sx: float, sy: float, state: Gdk.ModifierType
+    ) -> bool:
+        if self._active_tool is not None and not self._is_dragging:
+            return self._active_tool.on_motion(ix, iy, sx, sy, state)
+        return False
+
+    def handle_key_pressed(self, keyval: int, state: Gdk.ModifierType) -> bool:
+        if keyval == Gdk.KEY_Escape and self._is_dragging:
+            self.handle_cancel()
+            return True
+        if self._active_tool is not None:
+            return self._active_tool.on_key_pressed(keyval, state)
+        return False
+
+    def handle_key_released(self, keyval: int, state: Gdk.ModifierType) -> bool:
+        if self._active_tool is not None:
+            return self._active_tool.on_key_released(keyval, state)
+        return False
+
+    def draw_overlay(self, cr: cairo.Context) -> None:
+        if self._active_tool is not None:
+            cr.save()
+            self._active_tool.draw_overlay(cr)
+            cr.restore()
+
+    def draw_screen_overlay(self, cr: cairo.Context, width: int, height: int) -> None:
+        if self._active_tool is not None:
+            cr.save()
+            self._active_tool.draw_screen_overlay(cr, width, height)
+            cr.restore()
