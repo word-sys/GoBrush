@@ -44,6 +44,9 @@ class EmptyStateView(Adw.Bin):
                 description="Simple, fast, and lightweight image annotator",
                 paintable=tex,
             )
+            img = self._find_image(self.status_page)
+            if img is not None:
+                img.set_pixel_size(220)
         else:
             self.status_page = Adw.StatusPage(
                 title="GoBrush",
@@ -91,3 +94,15 @@ class EmptyStateView(Adw.Bin):
         root_box.append(bottom_bar)
 
         self.set_child(root_box)
+
+    @staticmethod
+    def _find_image(widget: Gtk.Widget) -> Gtk.Image | None:
+        if isinstance(widget, Gtk.Image):
+            return widget
+        child = widget.get_first_child()
+        while child:
+            res = EmptyStateView._find_image(child)
+            if res is not None:
+                return res
+            child = child.get_next_sibling()
+        return None
