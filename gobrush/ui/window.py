@@ -49,6 +49,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._current_format: str = "png"
         self.canvas_view = CanvasView()
         self.canvas = self.canvas_view.canvas
+        self.palette = self.canvas_view.palette
         self.status_bar = self.canvas_view.status_bar
         self.undo_manager = self.canvas.undo_manager
 

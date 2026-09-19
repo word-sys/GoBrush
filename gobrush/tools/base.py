@@ -65,7 +65,122 @@ class BaseTool(ABC):
 class SelectTool(BaseTool):
     tool_id: str = "select"
     name: str = "Select"
+    shortcut: str = "S"
+    icon_name: str = "edit-select-symbolic"
     cursor_name: str | None = "default"
+
+
+class TextTool(BaseTool):
+    tool_id: str = "text"
+    name: str = "Text"
+    shortcut: str = "T"
+    icon_name: str = "insert-text-symbolic"
+    cursor_name: str | None = "text"
+
+
+class PenTool(BaseTool):
+    tool_id: str = "pen"
+    name: str = "Pen"
+    shortcut: str = "P"
+    icon_name: str = "document-edit-symbolic"
+    cursor_name: str | None = "crosshair"
+
+
+class HighlighterTool(BaseTool):
+    tool_id: str = "highlighter"
+    name: str = "Highlighter"
+    shortcut: str = "H"
+    icon_name: str = "marker-symbolic"
+    cursor_name: str | None = "crosshair"
+
+
+class ArrowTool(BaseTool):
+    tool_id: str = "arrow"
+    name: str = "Arrow"
+    shortcut: str = "A"
+    icon_name: str = "go-next-symbolic"
+    cursor_name: str | None = "crosshair"
+
+
+class LineTool(BaseTool):
+    tool_id: str = "line"
+    name: str = "Line"
+    shortcut: str = "L"
+    icon_name: str = "view-list-symbolic"
+    cursor_name: str | None = "crosshair"
+
+
+class RectangleTool(BaseTool):
+    tool_id: str = "rectangle"
+    name: str = "Rectangle"
+    shortcut: str = "R"
+    icon_name: str = "window-maximize-symbolic"
+    cursor_name: str | None = "crosshair"
+
+
+class EllipseTool(BaseTool):
+    tool_id: str = "ellipse"
+    name: str = "Ellipse"
+    shortcut: str = "C"
+    icon_name: str = "radio-checked-symbolic"
+    cursor_name: str | None = "crosshair"
+
+
+class BlurTool(BaseTool):
+    tool_id: str = "blur"
+    name: str = "Blur"
+    shortcut: str = "B"
+    icon_name: str = "view-conceal-symbolic"
+    cursor_name: str | None = "crosshair"
+
+
+class BadgeTool(BaseTool):
+    tool_id: str = "badge"
+    name: str = "Badge"
+    shortcut: str = "N"
+    icon_name: str = "starred-symbolic"
+    cursor_name: str | None = "crosshair"
+
+
+class CheckmarkTool(BaseTool):
+    tool_id: str = "checkmark"
+    name: str = "Checkmark"
+    shortcut: str = "V"
+    icon_name: str = "emblem-ok-symbolic"
+    cursor_name: str | None = "crosshair"
+
+
+class CrossTool(BaseTool):
+    tool_id: str = "cross"
+    name: str = "Cross"
+    shortcut: str = "X"
+    icon_name: str = "window-close-symbolic"
+    cursor_name: str | None = "crosshair"
+
+
+class CropTool(BaseTool):
+    tool_id: str = "crop"
+    name: str = "Crop"
+    shortcut: str = "K"
+    icon_name: str = "zoom-fit-best-symbolic"
+    cursor_name: str | None = "crosshair"
+
+
+DEFAULT_TOOL_CLASSES = [
+    SelectTool,
+    TextTool,
+    PenTool,
+    HighlighterTool,
+    ArrowTool,
+    LineTool,
+    RectangleTool,
+    EllipseTool,
+    BlurTool,
+    BadgeTool,
+    CheckmarkTool,
+    CrossTool,
+    CropTool,
+]
 
 
 class ToolManager:
@@ -75,6 +190,11 @@ class ToolManager:
         self._active_tool: BaseTool | None = None
         self._tool_changed_callbacks: list[Callable[[BaseTool | None], None]] = []
         self._is_dragging: bool = False
+
+    def register_default_tools(self) -> None:
+        for tool_cls in DEFAULT_TOOL_CLASSES:
+            if tool_cls.tool_id not in self._tools:
+                self.register_tool(tool_cls(self.canvas))
 
     @property
     def active_tool(self) -> BaseTool | None:

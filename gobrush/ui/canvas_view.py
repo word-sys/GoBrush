@@ -6,19 +6,30 @@ from gi.repository import Gtk
 
 from gobrush.ui.canvas import Canvas
 from gobrush.ui.status_bar import CanvasStatusBar
+from gobrush.ui.palette import ToolPalette
 
 
-class CanvasView(Gtk.Overlay):
+class CanvasView(Gtk.Box):
     def __init__(self, canvas: Canvas | None = None) -> None:
-        super().__init__()
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL)
         self.set_hexpand(True)
         self.set_vexpand(True)
 
         self.canvas = canvas or Canvas()
-        self.set_child(self.canvas)
+        self.palette = ToolPalette(self.canvas.tool_manager)
+        self.append(self.palette)
+
+        self.separator = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        self.append(self.separator)
+
+        self._canvas_overlay = Gtk.Overlay()
+        self._canvas_overlay.set_hexpand(True)
+        self._canvas_overlay.set_vexpand(True)
+        self._canvas_overlay.set_child(self.canvas)
 
         self.status_bar = CanvasStatusBar()
-        self.add_overlay(self.status_bar)
+        self._canvas_overlay.add_overlay(self.status_bar)
+        self.append(self._canvas_overlay)
 
         # Track cursor movement for pixel coordinates readout
         self._motion_ctrl = Gtk.EventControllerMotion()
@@ -29,6 +40,9 @@ class CanvasView(Gtk.Overlay):
         # Subscribe to canvas viewport updates
         self.canvas.add_view_changed_callback(self._on_view_changed)
         self._sync_status()
+
+    def add_overlay(self, widget: Gtk.Widget) -> None:
+        self._canvas_overlay.add_overlay(widget)
 
     def _on_pointer_motion(
         self, controller: Gtk.EventControllerMotion, x: float, y: float

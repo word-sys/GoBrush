@@ -6,5 +6,15 @@ from gobrush.ui.status_bar import CanvasStatusBar
 from gobrush.ui.canvas_view import CanvasView
 
 from gobrush.ui.new_dialog import NewCanvasDialog
+from gobrush.ui.palette import ToolPalette, TOOL_DEFINITIONS
 
-__all__ = ["MainWindow", "EmptyStateView", "Canvas", "CanvasStatusBar", "CanvasView", "NewCanvasDialog"]
+__all__ = [
+    "MainWindow",
+    "EmptyStateView",
+    "Canvas",
+    "CanvasStatusBar",
+    "CanvasView",
+    "NewCanvasDialog",
+    "ToolPalette",
+    "TOOL_DEFINITIONS",
+]

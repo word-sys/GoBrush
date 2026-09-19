@@ -111,6 +111,9 @@ class Canvas(Gtk.DrawingArea):
         self._focus_controller.connect("leave", self._on_focus_leave)
         self.add_controller(self._focus_controller)
 
+        self.tool_manager.register_default_tools()
+        self.tool_manager.set_active_tool("select")
+
         self.connect("notify::scale-factor", self._on_scale_factor_changed)
         self.connect("unmap", self._on_unmap)
         self.set_draw_func(self._on_draw)
@@ -917,7 +920,7 @@ class Canvas(Gtk.DrawingArea):
             self.set_cursor_from_name("grabbing")
         elif self._space_pressed:
             self.set_cursor_from_name("grab")
-        elif self._tool_cursor_name:
+        elif self._tool_cursor_name and self._tool_cursor_name != "default":
             self.set_cursor_from_name(self._tool_cursor_name)
         else:
             self.set_cursor(None)
