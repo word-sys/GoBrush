@@ -181,6 +181,34 @@ DEFAULT_TOOL_CLASSES = [
     CrossTool,
     CropTool,
 ]
+TOOL_SHORTCUTS: dict[int, str] = {
+    Gdk.KEY_s: "select",
+    Gdk.KEY_S: "select",
+    Gdk.KEY_t: "text",
+    Gdk.KEY_T: "text",
+    Gdk.KEY_p: "pen",
+    Gdk.KEY_P: "pen",
+    Gdk.KEY_h: "highlighter",
+    Gdk.KEY_H: "highlighter",
+    Gdk.KEY_a: "arrow",
+    Gdk.KEY_A: "arrow",
+    Gdk.KEY_l: "line",
+    Gdk.KEY_L: "line",
+    Gdk.KEY_r: "rectangle",
+    Gdk.KEY_R: "rectangle",
+    Gdk.KEY_c: "ellipse",
+    Gdk.KEY_C: "ellipse",
+    Gdk.KEY_b: "blur",
+    Gdk.KEY_B: "blur",
+    Gdk.KEY_n: "badge",
+    Gdk.KEY_N: "badge",
+    Gdk.KEY_v: "checkmark",
+    Gdk.KEY_V: "checkmark",
+    Gdk.KEY_x: "cross",
+    Gdk.KEY_X: "cross",
+    Gdk.KEY_k: "crop",
+    Gdk.KEY_K: "crop",
+}
 
 
 class ToolManager:
@@ -309,11 +337,29 @@ class ToolManager:
         return False
 
     def handle_key_pressed(self, keyval: int, state: Gdk.ModifierType) -> bool:
-        if keyval == Gdk.KEY_Escape and self._is_dragging:
-            self.handle_cancel()
-            return True
+        if keyval == Gdk.KEY_Escape:
+            if self._is_dragging:
+                self.handle_cancel()
+                return True
+            elif self._active_tool is not None and self._active_tool.tool_id != "select":
+                if "select" in self._tools:
+                    self.set_active_tool("select")
+                    return True
+
         if self._active_tool is not None:
-            return self._active_tool.on_key_pressed(keyval, state)
+            if self._active_tool.on_key_pressed(keyval, state):
+                return True
+
+        if not self._is_dragging:
+            is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
+            is_alt = bool(state & Gdk.ModifierType.ALT_MASK)
+            is_super = bool(state & Gdk.ModifierType.SUPER_MASK) if hasattr(Gdk.ModifierType, "SUPER_MASK") else False
+            if not is_ctrl and not is_alt and not is_super:
+                tool_id = TOOL_SHORTCUTS.get(keyval)
+                if tool_id is not None and tool_id in self._tools:
+                    self.set_active_tool(tool_id)
+                    return True
+
         return False
 
     def handle_key_released(self, keyval: int, state: Gdk.ModifierType) -> bool:

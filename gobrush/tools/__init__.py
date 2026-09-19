@@ -17,6 +17,7 @@ from gobrush.tools.base import (
     CropTool,
     ToolManager,
     DEFAULT_TOOL_CLASSES,
+    TOOL_SHORTCUTS,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "CropTool",
     "ToolManager",
     "DEFAULT_TOOL_CLASSES",
+    "TOOL_SHORTCUTS",
 ]

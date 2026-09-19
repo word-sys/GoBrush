@@ -127,10 +127,12 @@ def ensure_palette_css() -> None:
             padding: 6px 8px;
             border-radius: 8px;
             min-height: 34px;
+            transition: all 120ms ease;
         }
-        .tool-button:checked {
+        .tool-button:checked, .tool-button.is-active-tool {
             background-color: @theme_selected_bg_color;
             color: @theme_selected_fg_color;
+            font-weight: 600;
         }
     """)
     Gtk.StyleContext.add_provider_for_display(
@@ -158,6 +160,8 @@ class ToolPalette(Gtk.Box):
 
         if tool_manager is not None:
             self.set_tool_manager(tool_manager)
+        else:
+            self._sync_button_state("select")
 
     @property
     def tool_manager(self) -> ToolManager | None:
@@ -205,13 +209,17 @@ class ToolPalette(Gtk.Box):
             return True
 
     def _sync_button_state(self, tool_id: str) -> None:
-        target_btn = self._buttons.get(tool_id)
-        if target_btn is not None and not target_btn.get_active():
-            self._updating_ui = True
-            try:
-                target_btn.set_active(True)
-            finally:
-                self._updating_ui = False
+        self._updating_ui = True
+        try:
+            for tid, btn in self._buttons.items():
+                if tid == tool_id:
+                    btn.add_css_class("is-active-tool")
+                    if not btn.get_active():
+                        btn.set_active(True)
+                else:
+                    btn.remove_css_class("is-active-tool")
+        finally:
+            self._updating_ui = False
 
     def _on_tool_changed(self, tool: BaseTool | None) -> None:
         if tool is not None:
