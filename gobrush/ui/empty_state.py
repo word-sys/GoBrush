@@ -1,10 +1,26 @@
-from __future__ import annotations
+from pathlib import Path
 from typing import Callable
 import gi
 
 gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw
+from gi.repository import Gtk, Gdk, Adw
+
+
+def _get_icon_texture() -> Gdk.Texture | None:
+    icon_paths = [
+        Path(__file__).resolve().parent.parent.parent / "icon" / "gobrush.svg",
+        Path("/usr/share/icons/hicolor/scalable/apps/gobrush.svg"),
+        Path("/usr/share/gobrush/icon/gobrush.svg"),
+    ]
+    for p in icon_paths:
+        if p.is_file():
+            try:
+                return Gdk.Texture.new_from_filename(str(p))
+            except Exception:
+                pass
+    return None
 
 
 class EmptyStateView(Adw.Bin):
@@ -21,11 +37,19 @@ class EmptyStateView(Adw.Bin):
 
         root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
-        self.status_page = Adw.StatusPage(
-            title="GoBrush",
-            description="Simple, fast, and lightweight image annotator",
-            icon_name="image-x-generic-symbolic",
-        )
+        tex = _get_icon_texture()
+        if tex is not None:
+            self.status_page = Adw.StatusPage(
+                title="GoBrush",
+                description="Simple, fast, and lightweight image annotator",
+                paintable=tex,
+            )
+        else:
+            self.status_page = Adw.StatusPage(
+                title="GoBrush",
+                description="Simple, fast, and lightweight image annotator",
+                icon_name="image-x-generic-symbolic",
+            )
         self.status_page.set_vexpand(True)
         self.status_page.set_hexpand(True)
 
