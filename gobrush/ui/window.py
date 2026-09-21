@@ -50,6 +50,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.canvas_view = CanvasView()
         self.canvas = self.canvas_view.canvas
         self.palette = self.canvas_view.palette
+        self.property_bar = self.canvas_view.property_bar
         self.status_bar = self.canvas_view.status_bar
         self.undo_manager = self.canvas.undo_manager
 

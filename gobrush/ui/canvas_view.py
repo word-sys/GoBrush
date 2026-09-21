@@ -81,3 +81,8 @@ class CanvasView(Gtk.Box):
 
     def zoom_actual_size(self, animate: bool = True) -> None:
         self.canvas.zoom_actual_size(animate=animate)
+
+    @property
+    def property_bar(self):
+        return self.palette.property_bar
+

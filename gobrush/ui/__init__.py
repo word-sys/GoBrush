@@ -7,6 +7,7 @@ from gobrush.ui.canvas_view import CanvasView
 
 from gobrush.ui.new_dialog import NewCanvasDialog
 from gobrush.ui.palette import ToolPalette, TOOL_DEFINITIONS, CURATED_PALETTE_COLORS, colors_match
+from gobrush.ui.property_bar import ContextPropertyBar, SIZE_OPTIONS, FILL_OPTIONS
 
 __all__ = [
     "MainWindow",
@@ -19,4 +20,7 @@ __all__ = [
     "TOOL_DEFINITIONS",
     "CURATED_PALETTE_COLORS",
     "colors_match",
+    "ContextPropertyBar",
+    "SIZE_OPTIONS",
+    "FILL_OPTIONS",
 ]

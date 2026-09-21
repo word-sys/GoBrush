@@ -8,6 +8,7 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gtk, Gdk
 
 from gobrush.compat.color import pick_color_dialog, rgba_from_floats
+from gobrush.ui.property_bar import ContextPropertyBar, SIZE_OPTIONS, FILL_OPTIONS
 
 if TYPE_CHECKING:
     from gobrush.tools.base import BaseTool, ToolManager
@@ -141,16 +142,17 @@ def ensure_palette_css() -> None:
     css_provider = Gtk.CssProvider()
     css_provider.load_from_data(b"""
         .tool-palette {
-            padding: 10px 8px;
+            padding: 6px 8px;
         }
         .tool-palette-header {
             font-weight: 700;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
         .tool-button {
-            padding: 6px 8px;
-            border-radius: 8px;
-            min-height: 34px;
+            padding: 4px 6px;
+            border-radius: 6px;
+            min-height: 28px;
+            font-size: 13px;
             transition: all 120ms ease;
         }
         .tool-button:checked, .tool-button.is-active-tool {
@@ -159,8 +161,8 @@ def ensure_palette_css() -> None:
             font-weight: 600;
         }
         .palette-separator {
-            margin: 6px 0;
-            opacity: 0.5;
+            margin: 3px 0;
+            opacity: 0.4;
         }
         .color-dot {
             min-width: 22px;
@@ -187,9 +189,9 @@ def ensure_palette_css() -> None:
             box-shadow: 0 0 0 2px @theme_selected_bg_color;
         }
         .color-picker-button {
-            padding: 6px 12px;
-            border-radius: 8px;
-            min-height: 34px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            min-height: 28px;
             transition: all 120ms ease;
         }
         .color-picker-button.is-active-color {
@@ -205,7 +207,7 @@ def ensure_palette_css() -> None:
 
 class ToolPalette(Gtk.Box):
     def __init__(self, tool_manager: ToolManager | None = None) -> None:
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         ensure_palette_css()
 
         self.add_css_class("tool-palette")
@@ -225,6 +227,7 @@ class ToolPalette(Gtk.Box):
         self._build_header()
         self._build_grid()
         self._build_color_section()
+        self._build_property_bar()
 
         if tool_manager is not None:
             self.set_tool_manager(tool_manager)
@@ -261,11 +264,31 @@ class ToolPalette(Gtk.Box):
             self._sync_color_state(color)
             self._notify_color_changed(color)
 
+    @property
+    def stroke_width(self) -> float:
+        return self.property_bar.stroke_width
+
+    def set_stroke_width(self, width: float) -> None:
+        self.property_bar.set_stroke_width(width)
+
+    @property
+    def fill_mode(self) -> str:
+        return self.property_bar.fill_mode
+
+    def set_fill_mode(self, mode: str) -> None:
+        self.property_bar.set_fill_mode(mode)
+
     def get_button(self, tool_id: str) -> Gtk.ToggleButton | None:
         return self._buttons.get(tool_id)
 
     def get_color_dot(self, name: str) -> Gtk.Button | None:
         return self._color_dots.get(name.lower())
+
+    def get_size_button(self, key: str | float) -> Gtk.ToggleButton | None:
+        return self.property_bar.get_size_button(key)
+
+    def get_fill_button(self, key: str) -> Gtk.ToggleButton | None:
+        return self.property_bar.get_fill_button(key)
 
     def add_color_changed_callback(
         self, cb: Callable[[tuple[float, float, float, float]], None]
@@ -293,6 +316,9 @@ class ToolPalette(Gtk.Box):
                 self._color_changed_handler = None
 
         self._tool_manager = tool_manager
+
+        if hasattr(self, "property_bar"):
+            self.property_bar.set_tool_manager(tool_manager)
 
         if self._tool_manager is not None:
             self._tool_manager.register_default_tools()
@@ -336,6 +362,8 @@ class ToolPalette(Gtk.Box):
     def _on_tool_changed(self, tool: BaseTool | None) -> None:
         if tool is not None:
             self._sync_button_state(tool.tool_id)
+            if hasattr(self, "property_bar"):
+                self.property_bar.update_for_tool(tool.tool_id)
 
     def _on_button_clicked(self, button: Gtk.ToggleButton, tool_id: str) -> None:
         if self._updating_ui:
@@ -484,3 +512,11 @@ class ToolPalette(Gtk.Box):
     ) -> None:
         self._sync_color_state(color)
         self._notify_color_changed(color)
+
+    def _build_property_bar(self) -> None:
+        sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        sep.add_css_class("palette-separator")
+        self.append(sep)
+
+        self.property_bar = ContextPropertyBar(self._tool_manager)
+        self.append(self.property_bar)

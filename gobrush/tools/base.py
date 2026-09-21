@@ -212,6 +212,10 @@ TOOL_SHORTCUTS: dict[int, str] = {
 
 
 DEFAULT_TOOL_COLOR: tuple[float, float, float, float] = (0.88, 0.11, 0.14, 1.0)
+DEFAULT_STROKE_WIDTH: float = 4.0
+DEFAULT_FILL_MODE: str = "outline"
+SUPPORTED_STROKE_WIDTHS: list[float] = [2.0, 4.0, 8.0, 16.0]
+SUPPORTED_FILL_MODES: list[str] = ["outline", "semi", "solid"]
 
 
 class ToolManager:
@@ -221,7 +225,10 @@ class ToolManager:
         self._active_tool: BaseTool | None = None
         self._tool_changed_callbacks: list[Callable[[BaseTool | None], None]] = []
         self._color_changed_callbacks: list[Callable[[tuple[float, float, float, float]], None]] = []
+        self._style_changed_callbacks: list[Callable[[float, str], None]] = []
         self._current_color: tuple[float, float, float, float] = DEFAULT_TOOL_COLOR
+        self._stroke_width: float = DEFAULT_STROKE_WIDTH
+        self._fill_mode: str = DEFAULT_FILL_MODE
         self._is_dragging: bool = False
 
     def register_default_tools(self) -> None:
@@ -327,6 +334,55 @@ class ToolManager:
     def _notify_color_changed(self, color: tuple[float, float, float, float]) -> None:
         for cb in list(self._color_changed_callbacks):
             cb(color)
+
+    @property
+    def stroke_width(self) -> float:
+        return self._stroke_width
+
+    def set_stroke_width(self, width: float) -> None:
+        clamped = max(0.5, float(width))
+        if self._stroke_width == clamped:
+            return
+        self._stroke_width = clamped
+        self._notify_style_changed()
+
+    @property
+    def fill_mode(self) -> str:
+        return self._fill_mode
+
+    def set_fill_mode(self, mode: str) -> None:
+        if mode not in SUPPORTED_FILL_MODES:
+            return
+        if self._fill_mode == mode:
+            return
+        self._fill_mode = mode
+        self._notify_style_changed()
+
+    def get_effective_fill_color(self) -> tuple[float, float, float, float] | None:
+        if self._fill_mode == "outline":
+            return None
+        r, g, b, _ = self._current_color
+        if self._fill_mode == "semi":
+            return (r, g, b, 0.25)
+        elif self._fill_mode == "solid":
+            return (r, g, b, 1.0)
+        return None
+
+    def add_style_changed_callback(
+        self, cb: Callable[[float, str], None]
+    ) -> None:
+        if cb not in self._style_changed_callbacks:
+            self._style_changed_callbacks.append(cb)
+
+    def remove_style_changed_callback(
+        self, cb: Callable[[float, str], None]
+    ) -> None:
+        if cb in self._style_changed_callbacks:
+            self._style_changed_callbacks.remove(cb)
+
+    def _notify_style_changed(self) -> None:
+        for cb in list(self._style_changed_callbacks):
+            cb(self._stroke_width, self._fill_mode)
 
     def handle_press(
         self, ix: float, iy: float, sx: float, sy: float, state: Gdk.ModifierType
