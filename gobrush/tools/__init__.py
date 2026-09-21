@@ -18,6 +18,7 @@ from gobrush.tools.base import (
     ToolManager,
     DEFAULT_TOOL_CLASSES,
     TOOL_SHORTCUTS,
+    DEFAULT_TOOL_COLOR,
 )
 
 __all__ = [
@@ -38,4 +39,5 @@ __all__ = [
     "ToolManager",
     "DEFAULT_TOOL_CLASSES",
     "TOOL_SHORTCUTS",
+    "DEFAULT_TOOL_COLOR",
 ]

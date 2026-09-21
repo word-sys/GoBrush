@@ -6,7 +6,7 @@ from gobrush.ui.status_bar import CanvasStatusBar
 from gobrush.ui.canvas_view import CanvasView
 
 from gobrush.ui.new_dialog import NewCanvasDialog
-from gobrush.ui.palette import ToolPalette, TOOL_DEFINITIONS
+from gobrush.ui.palette import ToolPalette, TOOL_DEFINITIONS, CURATED_PALETTE_COLORS, colors_match
 
 __all__ = [
     "MainWindow",
@@ -17,4 +17,6 @@ __all__ = [
     "NewCanvasDialog",
     "ToolPalette",
     "TOOL_DEFINITIONS",
+    "CURATED_PALETTE_COLORS",
+    "colors_match",
 ]

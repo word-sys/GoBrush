@@ -211,12 +211,17 @@ TOOL_SHORTCUTS: dict[int, str] = {
 }
 
 
+DEFAULT_TOOL_COLOR: tuple[float, float, float, float] = (0.88, 0.11, 0.14, 1.0)
+
+
 class ToolManager:
     def __init__(self, canvas: Canvas | None = None) -> None:
         self.canvas: Canvas | None = canvas
         self._tools: dict[str, BaseTool] = {}
         self._active_tool: BaseTool | None = None
         self._tool_changed_callbacks: list[Callable[[BaseTool | None], None]] = []
+        self._color_changed_callbacks: list[Callable[[tuple[float, float, float, float]], None]] = []
+        self._current_color: tuple[float, float, float, float] = DEFAULT_TOOL_COLOR
         self._is_dragging: bool = False
 
     def register_default_tools(self) -> None:
@@ -296,6 +301,32 @@ class ToolManager:
     def remove_tool_changed_callback(self, cb: Callable[[BaseTool | None], None]) -> None:
         if cb in self._tool_changed_callbacks:
             self._tool_changed_callbacks.remove(cb)
+
+    @property
+    def current_color(self) -> tuple[float, float, float, float]:
+        return self._current_color
+
+    def set_current_color(self, color: tuple[float, float, float, float]) -> None:
+        if self._current_color == color:
+            return
+        self._current_color = color
+        self._notify_color_changed(color)
+
+    def add_color_changed_callback(
+        self, cb: Callable[[tuple[float, float, float, float]], None]
+    ) -> None:
+        if cb not in self._color_changed_callbacks:
+            self._color_changed_callbacks.append(cb)
+
+    def remove_color_changed_callback(
+        self, cb: Callable[[tuple[float, float, float, float]], None]
+    ) -> None:
+        if cb in self._color_changed_callbacks:
+            self._color_changed_callbacks.remove(cb)
+
+    def _notify_color_changed(self, color: tuple[float, float, float, float]) -> None:
+        for cb in list(self._color_changed_callbacks):
+            cb(color)
 
     def handle_press(
         self, ix: float, iy: float, sx: float, sy: float, state: Gdk.ModifierType
