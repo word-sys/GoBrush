@@ -115,6 +115,8 @@ class AnnotationItem(ABC):
         raise NotImplementedError
 
     def get_geometry(self) -> Any:
+        if all(hasattr(self, attr) for attr in ("x", "y", "w", "h")):
+            return (getattr(self, "x"), getattr(self, "y"), getattr(self, "w"), getattr(self, "h"))
         return self.get_bounds()
 
     def set_geometry(self, geometry: Any) -> bool:
