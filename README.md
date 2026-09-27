@@ -17,6 +17,7 @@ A lightweight, fast image annotation and screenshot markup utility for Linux des
 - **Annotation Tools** (in active development):
   - Freehand pen and text-preserving highlighter.
   - Geometric shapes (rectangles, rounded boxes, circles, straight lines, single-headed arrows).
+  - External picture overlays (`Add Image` via tool button, drag & drop, or `Ctrl+V`).
   - Privacy tools (mosaic pixelate, smooth blur, solid blackout/whiteout redaction).
   - Numbered step badges, reaction stamps, and non-destructive cropping.
 - **Undo / Redo & Clipboard**: Full history stack and instant bidirectional clipboard support.
