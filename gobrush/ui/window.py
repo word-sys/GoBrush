@@ -18,6 +18,7 @@ from gobrush.core.clipboard import (
     create_clipboard_content_provider,
     normalize_image_format,
     get_format_display_name,
+    AnnotationClipboard,
 )
 from gobrush.ui.empty_state import EmptyStateView
 from gobrush.ui.canvas import Canvas
@@ -666,6 +667,16 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_paste_action(self) -> None:
         self.paste_from_clipboard()
 
+    def duplicate_selected(self) -> bool:
+        if self.is_empty():
+            return False
+        if self.canvas.duplicate_selected():
+            count = len(self.canvas.selected_items)
+            msg = "Duplicated annotation" if count == 1 else f"Duplicated {count} annotations"
+            self.show_toast(msg)
+            return True
+        return False
+
     def _on_key_pressed(
         self, controller: Gtk.EventControllerKey, keyval: int, keycode: int, state: Gdk.ModifierType
     ) -> bool:
@@ -678,13 +689,42 @@ class MainWindow(Adw.ApplicationWindow):
             self._on_open_action()
             return True
 
+        # Ctrl+D: Duplicate selected annotations
+        if is_ctrl and keyval in (Gdk.KEY_d, Gdk.KEY_D):
+            if not self.is_empty() and self.canvas.selected_items:
+                return self.duplicate_selected()
+            return False
+
+        # Ctrl+C: Copy selected annotations (if any), else copy canvas image
+        if is_ctrl and keyval in (Gdk.KEY_c, Gdk.KEY_C):
+            if not self.is_empty() and self.canvas.selected_items:
+                count = len(self.canvas.selected_items)
+                if self.canvas.copy_selected():
+                    msg = "Copied annotation" if count == 1 else f"Copied {count} annotations"
+                    self.show_toast(msg)
+                    return True
+            self.copy_to_clipboard()
+            return True
+
+        # Ctrl+V: Paste vector annotations (if available), else paste system image
         if is_ctrl and keyval in (Gdk.KEY_v, Gdk.KEY_V):
+            if not self.is_empty() and AnnotationClipboard.get_instance().has_items:
+                if self.canvas.paste_selected():
+                    count = len(self.canvas.selected_items)
+                    msg = "Pasted annotation" if count == 1 else f"Pasted {count} annotations"
+                    self.show_toast(msg)
+                    return True
             self.paste_from_clipboard()
             return True
 
-        if is_ctrl and keyval in (Gdk.KEY_c, Gdk.KEY_C):
-            self.copy_to_clipboard()
-            return True
+        # Ctrl+X: Cut selected annotations
+        if is_ctrl and keyval in (Gdk.KEY_x, Gdk.KEY_X):
+            if not self.is_empty() and self.canvas.selected_items:
+                count = len(self.canvas.selected_items)
+                if self.canvas.cut_selected():
+                    msg = "Cut annotation" if count == 1 else f"Cut {count} annotations"
+                    self.show_toast(msg)
+                    return True
 
         is_shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
 

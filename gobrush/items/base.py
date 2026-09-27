@@ -109,10 +109,12 @@ class AnnotationItem(ABC):
         """Translate item position by (dx, dy) in image coordinates."""
         raise NotImplementedError
 
-    @abstractmethod
     def clone(self) -> AnnotationItem:
-        """Return a deep copy of this annotation item with a new unique ID."""
-        raise NotImplementedError
+        import copy
+        new_item = copy.deepcopy(self)
+        new_item.item_id = uuid.uuid4().hex
+        new_item.is_selected = False
+        return new_item
 
     def get_geometry(self) -> Any:
         if all(hasattr(self, attr) for attr in ("x", "y", "w", "h")):

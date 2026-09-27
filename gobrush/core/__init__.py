@@ -19,6 +19,8 @@ from gobrush.core.history import (
     AddAnnotationCommand,
     DeleteAnnotationCommand,
     DeleteCommand,
+    DuplicateAnnotationsCommand,
+    DuplicateCommand,
     CompoundCommand,
     MoveCommand,
     ResizeCommand,
@@ -32,6 +34,7 @@ from gobrush.core.clipboard import (
     get_mime_types_for_format,
     encode_surface_for_format,
     create_clipboard_content_provider,
+    AnnotationClipboard,
 )
 
 __all__ = [
@@ -42,6 +45,8 @@ __all__ = [
     "AddAnnotationCommand",
     "DeleteAnnotationCommand",
     "DeleteCommand",
+    "DuplicateAnnotationsCommand",
+    "DuplicateCommand",
     "CompoundCommand",
     "MoveCommand",
     "ResizeCommand",
@@ -63,5 +68,6 @@ __all__ = [
     "get_mime_types_for_format",
     "encode_surface_for_format",
     "create_clipboard_content_provider",
+    "AnnotationClipboard",
 ]
 

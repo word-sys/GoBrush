@@ -26,7 +26,9 @@ from gobrush.core.history import (
     ResizeCommand,
     MoveCommand,
     ZOrderCommand,
+    DuplicateAnnotationsCommand,
 )
+from gobrush.core.clipboard import AnnotationClipboard
 
 if TYPE_CHECKING:
     from gobrush.ui.canvas import Canvas
@@ -201,6 +203,71 @@ class SelectTool(BaseTool):
             return False
         cmd = ZOrderCommand(self.canvas.document, selected, "send_backward")
         self.canvas.execute_command(cmd)
+        return True
+
+    def duplicate_selected(self, offset: tuple[float, float] = (20.0, 20.0)) -> bool:
+        if not self.canvas or not self.canvas.document:
+            return False
+        selected = self.canvas.document.selected_items
+        if not selected:
+            return False
+        new_items = []
+        for it in selected:
+            cloned = it.clone()
+            cloned.move_by(offset[0], offset[1])
+            new_items.append(cloned)
+        cmd = DuplicateAnnotationsCommand(
+            self.canvas.document,
+            new_items,
+            previous_selected=selected,
+            name="Duplicate Annotation" if len(new_items) == 1 else "Duplicate Annotations",
+        )
+        self.canvas.execute_command(cmd)
+        self._sync_style_from_selection()
+        return True
+
+    def copy_selected(self) -> bool:
+        if not self.canvas or not self.canvas.document:
+            return False
+        selected = self.canvas.document.selected_items
+        if not selected:
+            return False
+        AnnotationClipboard.get_instance().copy(selected)
+        return True
+
+    def paste_selected(self, offset: tuple[float, float] = (20.0, 20.0)) -> bool:
+        if not self.canvas or not self.canvas.document:
+            return False
+        clip = AnnotationClipboard.get_instance()
+        if not clip.has_items:
+            return False
+        new_items = clip.paste(offset=offset)
+        if not new_items:
+            return False
+        cmd = DuplicateAnnotationsCommand(
+            self.canvas.document,
+            new_items,
+            previous_selected=self.canvas.document.selected_items,
+            name="Paste Annotation" if len(new_items) == 1 else "Paste Annotations",
+        )
+        self.canvas.execute_command(cmd)
+        self._sync_style_from_selection()
+        return True
+
+    def cut_selected(self) -> bool:
+        if not self.canvas or not self.canvas.document:
+            return False
+        selected = self.canvas.document.selected_items
+        if not selected:
+            return False
+        AnnotationClipboard.get_instance().copy(selected)
+        cmd = DeleteAnnotationCommand(
+            self.canvas.document,
+            selected,
+            name="Cut Annotation" if len(selected) == 1 else "Cut Annotations",
+        )
+        self.canvas.execute_command(cmd)
+        self._sync_style_from_selection()
         return True
 
     def hit_test(self, ix: float, iy: float, tolerance: float | None = None) -> AnnotationItem | None:
@@ -538,6 +605,22 @@ class SelectTool(BaseTool):
             if changed:
                 doc.notify_changed()
             return True
+
+        if is_ctrl and keyval in (Gdk.KEY_d, Gdk.KEY_D):
+            if doc.selected_items:
+                return self.duplicate_selected()
+
+        if is_ctrl and keyval in (Gdk.KEY_c, Gdk.KEY_C):
+            if doc.selected_items:
+                return self.copy_selected()
+
+        if is_ctrl and keyval in (Gdk.KEY_v, Gdk.KEY_V):
+            if AnnotationClipboard.get_instance().has_items:
+                return self.paste_selected()
+
+        if is_ctrl and keyval in (Gdk.KEY_x, Gdk.KEY_X):
+            if doc.selected_items:
+                return self.cut_selected()
 
         if keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
             return self.delete_selected()

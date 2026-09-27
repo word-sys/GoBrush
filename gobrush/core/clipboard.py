@@ -2,7 +2,7 @@ from __future__ import annotations
 import base64
 import io
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import cairo
 from PIL import Image
 import gi
@@ -12,6 +12,9 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib
 
 from gobrush.core.loader import cairo_surface_to_pil
+
+if TYPE_CHECKING:
+    from gobrush.items.base import AnnotationItem
 
 
 def normalize_image_format(fmt: str | None) -> str:
@@ -215,3 +218,74 @@ def create_clipboard_content_provider(
     if len(providers) == 1:
         return providers[0], display_name
     return Gdk.ContentProvider.new_union(providers), display_name
+
+
+class AnnotationClipboard:
+    _instance: AnnotationClipboard | None = None
+
+    def __init__(self) -> None:
+        self._items: list[Any] = []
+        self._paste_count: int = 0
+        self._internal_change: bool = False
+        self._connect_system_clipboard()
+
+    def _connect_system_clipboard(self) -> None:
+        try:
+            display = Gdk.Display.get_default()
+            if display:
+                cb = display.get_clipboard()
+                cb.connect("changed", self._on_system_clipboard_changed)
+        except Exception:
+            pass
+
+    def _on_system_clipboard_changed(self, clipboard: Gdk.Clipboard) -> None:
+        if self._internal_change:
+            self._internal_change = False
+        else:
+            self._items.clear()
+            self._paste_count = 0
+
+    @classmethod
+    def get_instance(cls) -> AnnotationClipboard:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    @classmethod
+    def reset(cls) -> None:
+        if cls._instance is not None:
+            cls._instance.clear()
+
+    def copy(self, items: list[AnnotationItem]) -> None:
+        self._items = [it.clone() for it in items]
+        self._paste_count = 0
+
+    def paste(self, offset: tuple[float, float] = (20.0, 20.0)) -> list[AnnotationItem]:
+        if not self._items:
+            return []
+        self._paste_count += 1
+        dx = offset[0] * self._paste_count
+        dy = offset[1] * self._paste_count
+        pasted = []
+        for it in self._items:
+            cloned = it.clone()
+            cloned.move_by(dx, dy)
+            pasted.append(cloned)
+        return pasted
+
+    def clear(self) -> None:
+        self._items.clear()
+        self._paste_count = 0
+
+    @property
+    def has_items(self) -> bool:
+        return len(self._items) > 0
+
+    @property
+    def item_count(self) -> int:
+        return len(self._items)
+
+    @property
+    def items(self) -> list[AnnotationItem]:
+        return [it.clone() for it in self._items]
+

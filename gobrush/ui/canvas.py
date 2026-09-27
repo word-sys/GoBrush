@@ -9,7 +9,8 @@ from gi.repository import Gtk, Gdk, GLib
 from gobrush.core.transform import ViewportTransform
 from gobrush.core.checkerboard import create_checkerboard_pattern
 from gobrush.core.document import AnnotationDocument
-from gobrush.core.history import Command, UndoManager, DeleteAnnotationCommand, ZOrderCommand
+from gobrush.core.history import Command, UndoManager, DeleteAnnotationCommand, ZOrderCommand, DuplicateAnnotationsCommand
+from gobrush.core.clipboard import AnnotationClipboard
 from gobrush.items.base import AnnotationItem
 from gobrush.tools.base import ToolManager, SelectTool
 
@@ -727,6 +728,72 @@ class Canvas(Gtk.DrawingArea):
         if not selected:
             return False
         cmd = ZOrderCommand(self.document, selected, "send_backward")
+        self.execute_command(cmd)
+        return True
+
+    def duplicate_selected(self, offset: tuple[float, float] = (20.0, 20.0)) -> bool:
+        tool = self.select_tool
+        if tool:
+            return tool.duplicate_selected(offset=offset)
+        selected = self.document.selected_items
+        if not selected:
+            return False
+        new_items = []
+        for it in selected:
+            cloned = it.clone()
+            cloned.move_by(offset[0], offset[1])
+            new_items.append(cloned)
+        cmd = DuplicateAnnotationsCommand(
+            self.document,
+            new_items,
+            previous_selected=selected,
+            name="Duplicate Annotation" if len(new_items) == 1 else "Duplicate Annotations",
+        )
+        self.execute_command(cmd)
+        return True
+
+    def copy_selected(self) -> bool:
+        tool = self.select_tool
+        if tool:
+            return tool.copy_selected()
+        selected = self.document.selected_items
+        if not selected:
+            return False
+        AnnotationClipboard.get_instance().copy(selected)
+        return True
+
+    def paste_selected(self, offset: tuple[float, float] = (20.0, 20.0)) -> bool:
+        tool = self.select_tool
+        if tool:
+            return tool.paste_selected(offset=offset)
+        clip = AnnotationClipboard.get_instance()
+        if not clip.has_items:
+            return False
+        new_items = clip.paste(offset=offset)
+        if not new_items:
+            return False
+        cmd = DuplicateAnnotationsCommand(
+            self.document,
+            new_items,
+            previous_selected=self.document.selected_items,
+            name="Paste Annotation" if len(new_items) == 1 else "Paste Annotations",
+        )
+        self.execute_command(cmd)
+        return True
+
+    def cut_selected(self) -> bool:
+        tool = self.select_tool
+        if tool:
+            return tool.cut_selected()
+        selected = self.document.selected_items
+        if not selected:
+            return False
+        AnnotationClipboard.get_instance().copy(selected)
+        cmd = DeleteAnnotationCommand(
+            self.document,
+            selected,
+            name="Cut Annotation" if len(selected) == 1 else "Cut Annotations",
+        )
         self.execute_command(cmd)
         return True
 

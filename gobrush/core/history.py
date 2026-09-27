@@ -96,6 +96,50 @@ class DeleteAnnotationCommand(Command):
 DeleteCommand = DeleteAnnotationCommand
 
 
+class DuplicateAnnotationsCommand(Command):
+    def __init__(
+        self,
+        document: AnnotationDocument,
+        new_items: AnnotationItem | list[AnnotationItem],
+        previous_selected: list[AnnotationItem] | None = None,
+        name: str = "Duplicate Annotations",
+    ) -> None:
+        self.document = document
+        self.new_items: list[AnnotationItem] = (
+            [new_items] if hasattr(new_items, "item_id") else list(new_items)
+        )
+        self.previous_selected: list[AnnotationItem] = (
+            list(previous_selected) if previous_selected is not None else []
+        )
+        self.name = name
+        self._indices: list[int] = []
+
+    def execute(self) -> None:
+        self.document.deselect_all()
+        self._indices.clear()
+        for it in self.new_items:
+            idx = self.document.add_item(it)
+            self._indices.append(idx)
+            self.document.select_item(it, exclusive=False)
+
+    def undo(self) -> None:
+        for it in self.new_items:
+            self.document.remove_item(it)
+        self.document.deselect_all()
+        for it in self.previous_selected:
+            if it in self.document._items:
+                self.document.select_item(it, exclusive=False)
+
+    def redo(self) -> None:
+        self.document.deselect_all()
+        for it, idx in zip(self.new_items, self._indices):
+            self.document.add_item(it, index=idx)
+            self.document.select_item(it, exclusive=False)
+
+
+DuplicateCommand = DuplicateAnnotationsCommand
+
+
 class CompoundCommand(Command):
     def __init__(
         self,
