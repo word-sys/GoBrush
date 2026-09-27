@@ -24,6 +24,8 @@ from gobrush.core.history import (
     DeleteAnnotationCommand,
     RestyleCommand,
     ResizeCommand,
+    MoveCommand,
+    ZOrderCommand,
 )
 
 if TYPE_CHECKING:
@@ -70,6 +72,12 @@ class SelectTool(BaseTool):
         self._initial_geometry: Any = None
         self._initial_pos: tuple[float, float] | None = None
 
+        self._is_moving_items: bool = False
+        self._moving_items: list[AnnotationItem] = []
+        self._total_move_dx: float = 0.0
+        self._total_move_dy: float = 0.0
+        self._last_drag_pos: tuple[float, float] | None = None
+
     def activate(self) -> None:
         super().activate()
         if self.canvas and self.canvas.tool_manager:
@@ -115,6 +123,14 @@ class SelectTool(BaseTool):
         return self._resizing_item
 
     @property
+    def is_moving_items(self) -> bool:
+        return self._is_moving_items
+
+    @property
+    def moving_items(self) -> list[AnnotationItem]:
+        return list(self._moving_items)
+
+    @property
     def selected_items(self) -> list[AnnotationItem]:
         if self.canvas and self.canvas.document:
             return self.canvas.document.selected_items
@@ -134,6 +150,58 @@ class SelectTool(BaseTool):
     def deselect_all(self) -> None:
         if self.canvas and self.canvas.document:
             self.canvas.document.deselect_all()
+
+    def delete_selected(self) -> bool:
+        if not self.canvas or not self.canvas.document:
+            return False
+        selected = self.canvas.document.selected_items
+        if not selected:
+            return False
+        self._reset_interaction()
+        cmd = DeleteAnnotationCommand(self.canvas.document, selected)
+        self.canvas.execute_command(cmd)
+        self._sync_style_from_selection()
+        return True
+
+    def bring_to_front(self) -> bool:
+        if not self.canvas or not self.canvas.document:
+            return False
+        selected = self.canvas.document.selected_items
+        if not selected:
+            return False
+        cmd = ZOrderCommand(self.canvas.document, selected, "bring_to_front")
+        self.canvas.execute_command(cmd)
+        return True
+
+    def send_to_back(self) -> bool:
+        if not self.canvas or not self.canvas.document:
+            return False
+        selected = self.canvas.document.selected_items
+        if not selected:
+            return False
+        cmd = ZOrderCommand(self.canvas.document, selected, "send_to_back")
+        self.canvas.execute_command(cmd)
+        return True
+
+    def bring_forward(self) -> bool:
+        if not self.canvas or not self.canvas.document:
+            return False
+        selected = self.canvas.document.selected_items
+        if not selected:
+            return False
+        cmd = ZOrderCommand(self.canvas.document, selected, "bring_forward")
+        self.canvas.execute_command(cmd)
+        return True
+
+    def send_backward(self) -> bool:
+        if not self.canvas or not self.canvas.document:
+            return False
+        selected = self.canvas.document.selected_items
+        if not selected:
+            return False
+        cmd = ZOrderCommand(self.canvas.document, selected, "send_backward")
+        self.canvas.execute_command(cmd)
+        return True
 
     def hit_test(self, ix: float, iy: float, tolerance: float | None = None) -> AnnotationItem | None:
         if not self.canvas or not self.canvas.document:
@@ -162,6 +230,11 @@ class SelectTool(BaseTool):
         self._press_screen = (sx, sy)
         self._has_dragged = False
         self._selected_on_press_was_already_selected = False
+        self._is_moving_items = False
+        self._moving_items = []
+        self._total_move_dx = 0.0
+        self._total_move_dy = 0.0
+        self._last_drag_pos = None
 
         if not self.canvas or not self.canvas.document:
             return False
@@ -193,11 +266,20 @@ class SelectTool(BaseTool):
                     doc.notify_changed()
                 else:
                     doc.select_item(hit, exclusive=False)
+                    self._is_moving_items = True
+                    self._moving_items = list(doc.selected_items)
+                    self._last_drag_pos = (ix, iy)
             else:
                 if hit.is_selected:
                     self._selected_on_press_was_already_selected = True
+                    self._is_moving_items = True
+                    self._moving_items = list(doc.selected_items)
+                    self._last_drag_pos = (ix, iy)
                 else:
                     doc.select_item(hit, exclusive=True)
+                    self._is_moving_items = True
+                    self._moving_items = [hit]
+                    self._last_drag_pos = (ix, iy)
             self._sync_style_from_selection()
             return True
         else:
@@ -231,6 +313,22 @@ class SelectTool(BaseTool):
                 self.canvas.queue_draw()
             return True
 
+        # Handle item dragging
+        if self._is_moving_items and self._moving_items and self._last_drag_pos is not None:
+            step_dx = ix - self._last_drag_pos[0]
+            step_dy = iy - self._last_drag_pos[1]
+            if step_dx != 0.0 or step_dy != 0.0:
+                for it in self._moving_items:
+                    it.move_by(step_dx, step_dy)
+                self._total_move_dx += step_dx
+                self._total_move_dy += step_dy
+                self._last_drag_pos = (ix, iy)
+                if self.canvas and self.canvas.document:
+                    self.canvas.document.mark_dirty()
+            if self.canvas:
+                self.canvas.set_cursor_from_name("grabbing")
+            return True
+
         # Handle marquee drag
         if self._is_marquee:
             self._marquee_end = (ix, iy)
@@ -251,7 +349,7 @@ class SelectTool(BaseTool):
         is_shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
         is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
 
-        # Complete handle resize
+        # 1. Complete handle resize
         if self._active_handle and self._resizing_item:
             item = self._resizing_item
             old_geom = self._initial_geometry
@@ -266,9 +364,36 @@ class SelectTool(BaseTool):
                 self.canvas.undo_manager.push(cmd, execute=False)
 
             self._reset_interaction()
+            self._update_hover_cursor(ix, iy)
             return True
 
-        # Complete marquee selection
+        # 2. Complete item moving
+        if self._is_moving_items:
+            moving_items = list(self._moving_items)
+            total_dx = self._total_move_dx
+            total_dy = self._total_move_dy
+            has_dragged = self._has_dragged
+
+            self._is_moving_items = False
+            self._moving_items = []
+            self._total_move_dx = 0.0
+            self._total_move_dy = 0.0
+            self._last_drag_pos = None
+
+            if has_dragged and (abs(total_dx) > 1e-4 or abs(total_dy) > 1e-4):
+                cmd = MoveCommand(moving_items, total_dx, total_dy, document=doc)
+                self.canvas.undo_manager.push(cmd, execute=False)
+            elif not has_dragged:
+                if self._hit_item is not None and self._selected_on_press_was_already_selected:
+                    if not is_shift and not is_ctrl:
+                        doc.select_item(self._hit_item, exclusive=True)
+
+            self._sync_style_from_selection()
+            self._reset_interaction()
+            self._update_hover_cursor(ix, iy)
+            return True
+
+        # 3. Complete marquee selection
         if self._is_marquee:
             if self._has_dragged:
                 x1 = min(self._marquee_start[0], self._marquee_end[0])
@@ -303,6 +428,7 @@ class SelectTool(BaseTool):
 
         self._sync_style_from_selection()
         self._reset_interaction()
+        self._update_hover_cursor(ix, iy)
         return True
 
     def on_cancel(self) -> None:
@@ -310,7 +436,29 @@ class SelectTool(BaseTool):
             self._resizing_item.set_geometry(self._initial_geometry)
             if self.canvas and self.canvas.document:
                 self.canvas.document.mark_dirty()
+        elif self._is_moving_items and self._moving_items:
+            if abs(self._total_move_dx) > 1e-4 or abs(self._total_move_dy) > 1e-4:
+                for it in self._moving_items:
+                    it.move_by(-self._total_move_dx, -self._total_move_dy)
+                if self.canvas and self.canvas.document:
+                    self.canvas.document.mark_dirty()
         self._reset_interaction()
+        if self.canvas:
+            self.canvas.set_cursor(None)
+
+    def _update_hover_cursor(self, ix: float, iy: float) -> None:
+        if not self.canvas or not self.canvas.document:
+            return
+        handle_item, handle_id = self.hit_test_handle(ix, iy)
+        if handle_item and handle_id:
+            cursor = HANDLE_CURSORS.get(handle_id, "default")
+            self.canvas.set_cursor_from_name(cursor)
+            return
+        hit = self.hit_test(ix, iy)
+        if hit is not None:
+            self.canvas.set_cursor_from_name("pointer")
+        else:
+            self.canvas.set_cursor(None)
 
     def on_motion(
         self, ix: float, iy: float, sx: float, sy: float, state: Gdk.ModifierType
@@ -321,6 +469,10 @@ class SelectTool(BaseTool):
         if self._active_handle:
             cursor = HANDLE_CURSORS.get(self._active_handle, "default")
             self.canvas.set_cursor_from_name(cursor)
+            return True
+
+        if self._is_moving_items:
+            self.canvas.set_cursor_from_name("grabbing")
             return True
 
         prev_hovered = (self._hovered_item, self._hovered_handle)
@@ -355,11 +507,19 @@ class SelectTool(BaseTool):
 
         doc = self.canvas.document
         is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        is_shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
 
         if keyval == Gdk.KEY_Escape:
             if self._active_handle and self._resizing_item and self._initial_geometry:
                 self._resizing_item.set_geometry(self._initial_geometry)
                 doc.mark_dirty()
+                self._reset_interaction()
+                return True
+            if self._is_moving_items and self._moving_items:
+                if abs(self._total_move_dx) > 1e-4 or abs(self._total_move_dy) > 1e-4:
+                    for it in self._moving_items:
+                        it.move_by(-self._total_move_dx, -self._total_move_dy)
+                    doc.mark_dirty()
                 self._reset_interaction()
                 return True
             if self._is_marquee:
@@ -380,11 +540,58 @@ class SelectTool(BaseTool):
             return True
 
         if keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
-            selected = doc.selected_items
-            if selected:
-                cmd = DeleteAnnotationCommand(doc, selected)
-                self.canvas.execute_command(cmd)
-                return True
+            return self.delete_selected()
+
+        # Z-order keyboard shortcuts
+        if keyval == Gdk.KEY_Page_Up:
+            if is_shift:
+                return self.bring_to_front()
+            return self.bring_forward()
+
+        if keyval == Gdk.KEY_Page_Down:
+            if is_shift:
+                return self.send_to_back()
+            return self.send_backward()
+
+        if keyval in (Gdk.KEY_bracketright, Gdk.KEY_braceright):
+            if is_ctrl:
+                if is_shift:
+                    return self.bring_to_front()
+                return self.bring_forward()
+
+        if keyval in (Gdk.KEY_bracketleft, Gdk.KEY_braceleft):
+            if is_ctrl:
+                if is_shift:
+                    return self.send_to_back()
+                return self.send_backward()
+
+        if keyval == Gdk.KEY_Home and doc.selected_items:
+            return self.bring_to_front()
+
+        if keyval == Gdk.KEY_End and doc.selected_items:
+            return self.send_to_back()
+
+        # Arrow key nudging for selected items
+        if doc.selected_items and keyval in (
+            Gdk.KEY_Up, Gdk.KEY_KP_Up,
+            Gdk.KEY_Down, Gdk.KEY_KP_Down,
+            Gdk.KEY_Left, Gdk.KEY_KP_Left,
+            Gdk.KEY_Right, Gdk.KEY_KP_Right,
+        ):
+            step = 10.0 if is_shift else 1.0
+            dx, dy = 0.0, 0.0
+            if keyval in (Gdk.KEY_Up, Gdk.KEY_KP_Up):
+                dy = -step
+            elif keyval in (Gdk.KEY_Down, Gdk.KEY_KP_Down):
+                dy = step
+            elif keyval in (Gdk.KEY_Left, Gdk.KEY_KP_Left):
+                dx = -step
+            elif keyval in (Gdk.KEY_Right, Gdk.KEY_KP_Right):
+                dx = step
+
+            cmd = MoveCommand(doc.selected_items, dx, dy, document=doc, name="Nudge Annotation")
+            self.canvas.execute_command(cmd)
+            return True
 
         return False
 
@@ -584,5 +791,10 @@ class SelectTool(BaseTool):
         self._resizing_item = None
         self._initial_geometry = None
         self._initial_pos = None
+        self._is_moving_items = False
+        self._moving_items = []
+        self._total_move_dx = 0.0
+        self._total_move_dy = 0.0
+        self._last_drag_pos = None
         if self.canvas:
             self.canvas.queue_draw()

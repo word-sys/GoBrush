@@ -93,6 +93,9 @@ class DeleteAnnotationCommand(Command):
             self.document.remove_item(it)
 
 
+DeleteCommand = DeleteAnnotationCommand
+
+
 class CompoundCommand(Command):
     def __init__(
         self,
@@ -263,6 +266,58 @@ class RestyleCommand(Command):
 
     def redo(self) -> None:
         self.execute()
+
+
+class ZOrderCommand(Command):
+    def __init__(
+        self,
+        document: AnnotationDocument,
+        items: AnnotationItem | list[AnnotationItem],
+        action: str,
+        name: str | None = None,
+    ) -> None:
+        self.document = document
+        raw_items = [items] if hasattr(items, "item_id") else list(items)
+        self.items: list[AnnotationItem] = sorted(raw_items, key=lambda it: self.document.index_of(it))
+        self.action = action
+        if name is not None:
+            self.name = name
+        elif action == "bring_to_front":
+            self.name = "Bring to Front"
+        elif action == "send_to_back":
+            self.name = "Send to Back"
+        elif action == "bring_forward":
+            self.name = "Bring Forward"
+        elif action == "send_backward":
+            self.name = "Send Backward"
+        else:
+            self.name = "Reorder Annotations"
+        self._old_order: list[AnnotationItem] = []
+        self._new_order: list[AnnotationItem] = []
+
+    def execute(self) -> None:
+        self._old_order = list(self.document._items)
+        if self.action == "bring_to_front":
+            for it in self.items:
+                self.document.bring_to_front(it)
+        elif self.action == "send_to_back":
+            for it in reversed(self.items):
+                self.document.send_to_back(it)
+        elif self.action == "bring_forward":
+            for it in reversed(self.items):
+                self.document.bring_forward(it)
+        elif self.action == "send_backward":
+            for it in self.items:
+                self.document.send_backward(it)
+        self._new_order = list(self.document._items)
+
+    def undo(self) -> None:
+        self.document._items = list(self._old_order)
+        self.document.mark_dirty()
+
+    def redo(self) -> None:
+        self.document._items = list(self._new_order)
+        self.document.mark_dirty()
 
 
 class UndoManager:

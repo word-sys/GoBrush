@@ -9,7 +9,7 @@ from gi.repository import Gtk, Gdk, GLib
 from gobrush.core.transform import ViewportTransform
 from gobrush.core.checkerboard import create_checkerboard_pattern
 from gobrush.core.document import AnnotationDocument
-from gobrush.core.history import Command, UndoManager
+from gobrush.core.history import Command, UndoManager, DeleteAnnotationCommand, ZOrderCommand
 from gobrush.items.base import AnnotationItem
 from gobrush.tools.base import ToolManager, SelectTool
 
@@ -674,6 +674,61 @@ class Canvas(Gtk.DrawingArea):
 
     def deselect_all(self) -> None:
         self.document.deselect_all()
+
+    def delete_selected(self) -> bool:
+        tool = self.select_tool
+        if tool:
+            return tool.delete_selected()
+        selected = self.document.selected_items
+        if not selected:
+            return False
+        cmd = DeleteAnnotationCommand(self.document, selected)
+        self.execute_command(cmd)
+        return True
+
+    def bring_to_front(self) -> bool:
+        tool = self.select_tool
+        if tool:
+            return tool.bring_to_front()
+        selected = self.document.selected_items
+        if not selected:
+            return False
+        cmd = ZOrderCommand(self.document, selected, "bring_to_front")
+        self.execute_command(cmd)
+        return True
+
+    def send_to_back(self) -> bool:
+        tool = self.select_tool
+        if tool:
+            return tool.send_to_back()
+        selected = self.document.selected_items
+        if not selected:
+            return False
+        cmd = ZOrderCommand(self.document, selected, "send_to_back")
+        self.execute_command(cmd)
+        return True
+
+    def bring_forward(self) -> bool:
+        tool = self.select_tool
+        if tool:
+            return tool.bring_forward()
+        selected = self.document.selected_items
+        if not selected:
+            return False
+        cmd = ZOrderCommand(self.document, selected, "bring_forward")
+        self.execute_command(cmd)
+        return True
+
+    def send_backward(self) -> bool:
+        tool = self.select_tool
+        if tool:
+            return tool.send_backward()
+        selected = self.document.selected_items
+        if not selected:
+            return False
+        cmd = ZOrderCommand(self.document, selected, "send_backward")
+        self.execute_command(cmd)
+        return True
 
     @property
     def select_tool(self) -> SelectTool | None:
