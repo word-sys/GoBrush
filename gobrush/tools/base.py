@@ -62,12 +62,7 @@ class BaseTool(ABC):
         pass
 
 
-class SelectTool(BaseTool):
-    tool_id: str = "select"
-    name: str = "Select"
-    shortcut: str = "S"
-    icon_name: str = "edit-select-symbolic"
-    cursor_name: str | None = "default"
+from gobrush.tools.select import SelectTool
 
 
 class TextTool(BaseTool):

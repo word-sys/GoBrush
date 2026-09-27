@@ -658,6 +658,28 @@ class Canvas(Gtk.DrawingArea):
     def items(self) -> list[AnnotationItem]:
         return self.document.items
 
+    @property
+    def selected_items(self) -> list[AnnotationItem]:
+        return self.document.selected_items
+
+    @property
+    def selected_item(self) -> AnnotationItem | None:
+        return self.document.selected_item
+
+    def select_item(self, item: AnnotationItem | None, exclusive: bool = True) -> None:
+        self.document.select_item(item, exclusive=exclusive)
+        tool = self.tool_manager.get_tool("select")
+        if tool and hasattr(tool, "_sync_style_from_selection"):
+            tool._sync_style_from_selection()
+
+    def deselect_all(self) -> None:
+        self.document.deselect_all()
+
+    @property
+    def select_tool(self) -> SelectTool | None:
+        tool = self.tool_manager.get_tool("select")
+        return tool if isinstance(tool, SelectTool) else None
+
     def add_image_draw_hook(self, hook: Callable[[cairo.Context], None]) -> None:
         if hook not in self._image_draw_hooks:
             self._image_draw_hooks.append(hook)
