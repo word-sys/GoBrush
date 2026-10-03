@@ -63,6 +63,7 @@ class BaseTool(ABC):
 
 
 from gobrush.tools.select import SelectTool
+from gobrush.tools.pen import PenTool
 
 
 class TextTool(BaseTool):
@@ -71,14 +72,6 @@ class TextTool(BaseTool):
     shortcut: str = "T"
     icon_name: str = "insert-text-symbolic"
     cursor_name: str | None = "text"
-
-
-class PenTool(BaseTool):
-    tool_id: str = "pen"
-    name: str = "Pen"
-    shortcut: str = "P"
-    icon_name: str = "document-edit-symbolic"
-    cursor_name: str | None = "crosshair"
 
 
 class HighlighterTool(BaseTool):

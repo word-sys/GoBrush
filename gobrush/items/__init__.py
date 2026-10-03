@@ -17,8 +17,15 @@ from gobrush.items.base import (
     distance_point_to_line_segment,
 )
 
+from gobrush.items.pen import (
+    PenItem,
+    build_smooth_path,
+)
+
 __all__ = [
     "AnnotationItem",
+    "PenItem",
+    "build_smooth_path",
     "HANDLE_TOP_LEFT",
     "HANDLE_TOP_CENTER",
     "HANDLE_TOP_RIGHT",
