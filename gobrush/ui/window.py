@@ -680,6 +680,10 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_key_pressed(
         self, controller: Gtk.EventControllerKey, keyval: int, keycode: int, state: Gdk.ModifierType
     ) -> bool:
+        focus = self.get_focus()
+        if focus is not None and isinstance(focus, (Gtk.Editable, Gtk.TextView)):
+            return False
+
         is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK) and not bool(state & Gdk.ModifierType.ALT_MASK)
         if is_ctrl and keyval in (Gdk.KEY_n, Gdk.KEY_N):
             self.show_new_canvas_dialog()

@@ -414,6 +414,9 @@ class ToolManager:
             if self._active_tool.on_key_pressed(keyval, state):
                 return True
 
+        if self._active_tool is not None and getattr(self._active_tool, "is_editing", False):
+            return False
+
         if not self._is_dragging:
             is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
             is_alt = bool(state & Gdk.ModifierType.ALT_MASK)

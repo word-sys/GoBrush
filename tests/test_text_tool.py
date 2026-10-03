@@ -391,6 +391,33 @@ class TestTextTool(unittest.TestCase):
         self.assertEqual(prop_bar.label_size.get_text(), "Size")
         self.assertEqual(prop_bar.label_fill.get_text(), "Fill")
 
+    def test_on_cancel_does_not_abort_active_editing(self) -> None:
+        self.canvas.tool_manager.set_active_tool("text")
+        self.tool.start_editing(50.0, 50.0)
+        self.assertTrue(self.tool.is_editing)
+
+        # Trigger on_cancel (such as pointer leave or gesture drag cancel)
+        self.tool.on_cancel()
+        self.assertTrue(self.tool.is_editing)
+
+        # Explicit cancel_editing DOES abort
+        self.tool.cancel_editing()
+        self.assertFalse(self.tool.is_editing)
+
+    def test_shortcut_does_not_switch_tool_while_editing(self) -> None:
+        self.canvas.tool_manager.set_active_tool("text")
+        self.tool.start_editing(50.0, 50.0)
+        self.assertTrue(self.tool.is_editing)
+
+        # Pressing 'S' or 'P' while editing text should NOT switch tools
+        handled = self.canvas.tool_manager.handle_key_pressed(Gdk.KEY_s, Gdk.ModifierType(0))
+        self.assertEqual(self.canvas.tool_manager.active_tool_id, "text")
+        self.assertTrue(self.tool.is_editing)
+
+        handled = self.canvas.tool_manager.handle_key_pressed(Gdk.KEY_p, Gdk.ModifierType(0))
+        self.assertEqual(self.canvas.tool_manager.active_tool_id, "text")
+        self.assertTrue(self.tool.is_editing)
+
 
 if __name__ == "__main__":
     unittest.main()

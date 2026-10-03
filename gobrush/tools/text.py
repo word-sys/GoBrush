@@ -137,12 +137,18 @@ class TextTool(BaseTool):
             mgr.add_color_changed_callback(self._mgr_color_cb)
             self._mgr_style_cb = self._on_manager_style_changed
             mgr.add_style_changed_callback(self._mgr_style_cb)
+        if self.canvas is not None:
+            self._canvas_view_cb = self._on_canvas_view_changed
+            self.canvas.add_view_changed_callback(self._canvas_view_cb)
 
     def deactivate(self) -> None:
         super().deactivate()
         if self._is_editing:
             self.commit_editing()
         self._teardown_popover()
+        if self.canvas is not None and getattr(self, "_canvas_view_cb", None) is not None:
+            self.canvas.remove_view_changed_callback(self._canvas_view_cb)
+            self._canvas_view_cb = None
         if self.canvas and self.canvas.tool_manager:
             mgr = self.canvas.tool_manager
             if self._mgr_color_cb:
@@ -152,12 +158,25 @@ class TextTool(BaseTool):
                 mgr.remove_style_changed_callback(self._mgr_style_cb)
                 self._mgr_style_cb = None
 
+    def _on_canvas_view_changed(self) -> None:
+        if self._is_editing and self._popover is not None and self.canvas is not None:
+            sx, sy = self.canvas.image_to_screen(self._edit_pos[0], self._edit_pos[1])
+            rect = Gdk.Rectangle()
+            rect.x = max(0, int(round(sx)))
+            rect.y = max(0, int(round(sy)))
+            rect.width = 1
+            rect.height = 1
+            self._popover.set_pointing_to(rect)
+
     def _sync_properties_from_manager(self) -> None:
         if not self.canvas or not self.canvas.tool_manager:
             return
         mgr = self.canvas.tool_manager
         self._color = mgr.current_color
-        if mgr.stroke_width >= 8.0:
+        if mgr.stroke_width < 12.0:
+            mgr.set_stroke_width(20.0)
+            self._font_size = 20.0
+        else:
             self._font_size = float(mgr.stroke_width)
         self._fill_color = mgr.get_effective_fill_color()
         if mgr.fill_mode == "outline":
@@ -184,6 +203,15 @@ class TextTool(BaseTool):
                 self._fill_color = self.canvas.tool_manager.get_effective_fill_color()
         if self.canvas:
             self.canvas.queue_draw()
+
+    def _get_default_edit_pos(self) -> tuple[float, float]:
+        if self.canvas is not None:
+            if self.canvas.cursor_pos is not None:
+                return self.canvas.screen_to_image(*self.canvas.cursor_pos)
+            vw = self.canvas.viewport_width / 2.0 if self.canvas.viewport_width > 0 else 200.0
+            vh = self.canvas.viewport_height / 2.0 if self.canvas.viewport_height > 0 else 150.0
+            return self.canvas.screen_to_image(vw, vh)
+        return (100.0, 100.0)
 
     def on_press(
         self, ix: float, iy: float, sx: float, sy: float, state: Gdk.ModifierType
@@ -233,11 +261,16 @@ class TextTool(BaseTool):
         return self._is_editing
 
     def on_cancel(self) -> None:
+        if self._popover is not None or self._is_editing:
+            return
         self.cancel_editing()
 
     def on_key_pressed(self, keyval: int, state: Gdk.ModifierType) -> bool:
         if not self._is_editing:
             return False
+
+        is_ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        is_alt = bool(state & Gdk.ModifierType.ALT_MASK)
 
         if keyval == Gdk.KEY_Escape:
             self.cancel_editing()
@@ -246,6 +279,17 @@ class TextTool(BaseTool):
         if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
             self.commit_editing()
             return True
+
+        if not is_ctrl and not is_alt:
+            if keyval in (Gdk.KEY_BackSpace, Gdk.KEY_Delete):
+                if self._current_text:
+                    self.set_text(self._current_text[:-1])
+                return True
+
+            ch = Gdk.keyval_to_unicode(keyval)
+            if ch > 0 and chr(ch).isprintable():
+                self.set_text(self._current_text + chr(ch))
+                return True
 
         return False
 
@@ -322,6 +366,12 @@ class TextTool(BaseTool):
             btn_ok.add_css_class("suggested-action")
             btn_ok.connect("clicked", lambda _: self.commit_editing())
             box.append(btn_ok)
+
+            btn_cancel = Gtk.Button.new_from_icon_name("window-close-symbolic")
+            btn_cancel.set_tooltip_text("Cancel (Esc)")
+            btn_cancel.add_css_class("flat")
+            btn_cancel.connect("clicked", lambda _: self.cancel_editing())
+            box.append(btn_cancel)
 
             popover.set_child(box)
             self._popover_closed_id = popover.connect("closed", self._on_popover_closed)
@@ -505,9 +555,9 @@ class TextTool(BaseTool):
             return
 
         x, y = self._edit_pos
-        text = self._current_text.strip()
+        text = self._current_text
 
-        if text:
+        if text.strip():
             preview_item = TextItem(
                 x=x,
                 y=y,
@@ -526,24 +576,50 @@ class TextTool(BaseTool):
             preview_item.draw(cr)
 
             bx, by, bw, bh = preview_item.get_bounds()
-            cr.set_source_rgba(0.21, 0.52, 0.89, 0.8)
-            cr.set_line_width(1.0)
-            cr.set_dash([3.0, 3.0])
+            cr.set_source_rgba(0.21, 0.52, 0.89, 0.9)
+            cr.set_line_width(1.5)
+            cr.set_dash([4.0, 3.0])
             cr.rectangle(bx - 2.0, by - 2.0, bw + 4.0, bh + 4.0)
+            cr.stroke()
+
+            tw, th = preview_item.get_text_size()
+            cur_x = (x + self._padding_x + tw) if self._background_style in ("pill", "box") else (x + tw)
+            cur_y = (y + self._padding_y) if self._background_style in ("pill", "box") else y
+            cr.set_source_rgba(0.21, 0.52, 0.89, 1.0)
+            cr.set_line_width(2.0)
+            cr.set_dash([])
+            cr.move_to(cur_x + 2.0, cur_y)
+            cr.line_to(cur_x + 2.0, cur_y + max(14.0, self._font_size))
             cr.stroke()
             cr.restore()
         else:
             cr.save()
-            h = max(16.0, self._font_size)
-            cr.set_source_rgba(0.21, 0.52, 0.89, 0.9)
-            cr.set_line_width(2.0)
-            cr.move_to(x, y)
-            cr.line_to(x, y + h)
+            ph_h = max(24.0, self._font_size + 10.0)
+            ph_w = max(180.0, self._font_size * 7.0)
+
+            # Soft background
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.92)
+            cr.rectangle(x, y, ph_w, ph_h)
+            cr.fill_preserve()
+
+            # Accent dashed border
+            cr.set_source_rgba(0.21, 0.52, 0.89, 0.85)
+            cr.set_line_width(1.5)
+            cr.set_dash([4.0, 3.0])
             cr.stroke()
 
-            cr.move_to(x - 3.0, y)
-            cr.line_to(x + 3.0, y)
-            cr.move_to(x - 3.0, y + h)
-            cr.line_to(x + 3.0, y + h)
+            # Cursor
+            cr.set_source_rgba(0.21, 0.52, 0.89, 1.0)
+            cr.set_line_width(2.0)
+            cr.set_dash([])
+            cr.move_to(x + 10.0, y + 4.0)
+            cr.line_to(x + 10.0, y + ph_h - 4.0)
             cr.stroke()
+
+            # Placeholder prompt text
+            cr.set_source_rgba(0.4, 0.45, 0.55, 0.65)
+            cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+            cr.set_font_size(max(12.0, self._font_size * 0.75))
+            cr.move_to(x + 18.0, y + ph_h * 0.68)
+            cr.show_text("Type text here...")
             cr.restore()

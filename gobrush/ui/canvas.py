@@ -928,8 +928,6 @@ class Canvas(Gtk.DrawingArea):
 
     def _on_leave_internal(self, controller: Gtk.EventControllerMotion) -> None:
         self._cursor_pos = None
-        if not (self._is_panning or self._is_space_panning):
-            self.tool_manager.handle_cancel()
 
     def _on_scroll(
         self, controller: Gtk.EventControllerScroll, dx: float, dy: float
