@@ -21,10 +21,12 @@ from gobrush.items.pen import (
     PenItem,
     build_smooth_path,
 )
+from gobrush.items.highlighter import HighlighterItem
 
 __all__ = [
     "AnnotationItem",
     "PenItem",
+    "HighlighterItem",
     "build_smooth_path",
     "HANDLE_TOP_LEFT",
     "HANDLE_TOP_CENTER",
