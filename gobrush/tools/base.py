@@ -69,14 +69,7 @@ from gobrush.tools.line import LineTool
 from gobrush.tools.arrow import ArrowTool
 from gobrush.tools.rectangle import RectangleTool
 from gobrush.tools.ellipse import EllipseTool
-
-
-class TextTool(BaseTool):
-    tool_id: str = "text"
-    name: str = "Text"
-    shortcut: str = "T"
-    icon_name: str = "insert-text-symbolic"
-    cursor_name: str | None = "text"
+from gobrush.tools.text import TextTool
 
 
 class BlurTool(BaseTool):

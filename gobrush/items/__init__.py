@@ -40,6 +40,11 @@ from gobrush.items.ellipse import (
     draw_ellipse,
     point_in_ellipse,
 )
+from gobrush.items.text import (
+    TextItem,
+    measure_text_layout,
+    render_text_layout,
+)
 
 __all__ = [
     "AnnotationItem",
@@ -49,6 +54,7 @@ __all__ = [
     "ArrowItem",
     "RectangleItem",
     "EllipseItem",
+    "TextItem",
     "compute_arrowhead",
     "snap_angle",
     "build_smooth_path",
@@ -56,6 +62,8 @@ __all__ = [
     "point_in_rounded_rectangle",
     "draw_ellipse",
     "point_in_ellipse",
+    "measure_text_layout",
+    "render_text_layout",
     "HANDLE_TOP_LEFT",
     "HANDLE_TOP_CENTER",
     "HANDLE_TOP_RIGHT",

@@ -336,6 +336,11 @@ class ContextPropertyBar(Gtk.Box):
             self.update_for_tool(self._tool_manager.active_tool_id)
 
     def update_for_tool(self, tool_id: str | None) -> None:
+        if hasattr(self, "label_size"):
+            self.label_size.set_text("Font Size" if tool_id == "text" else "Size")
+        if hasattr(self, "label_fill"):
+            self.label_fill.set_text("Badge" if tool_id == "text" else "Fill")
+
         if tool_id in ("crop", "blur"):
             self.box_size.set_sensitive(False)
             self.box_fill.set_sensitive(False)
@@ -357,7 +362,7 @@ class ContextPropertyBar(Gtk.Box):
             if hasattr(self, "box_radius"):
                 self.box_radius.set_visible(True)
                 self.box_radius.set_sensitive(True)
-        elif tool_id == "ellipse":
+        elif tool_id in ("ellipse", "text"):
             self.box_size.set_sensitive(True)
             self.box_fill.set_sensitive(True)
             is_semi = (self.fill_mode == "semi")
