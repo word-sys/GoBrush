@@ -205,6 +205,7 @@ class AnnotationItem(ABC):
         stroke_width: float | None = None,
         fill_color: tuple[float, float, float, float] | None = None,
         clear_fill: bool = False,
+        **kwargs: Any,
     ) -> None:
         """Update styling attributes."""
         if stroke_color is not None:
@@ -215,6 +216,8 @@ class AnnotationItem(ABC):
             self.fill_color = None
         elif fill_color is not None:
             self.fill_color = fill_color
+        if "radius" in kwargs and kwargs["radius"] is not None and hasattr(self, "radius"):
+            setattr(self, "radius", max(0.0, float(kwargs["radius"])))
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize item attributes to a dictionary."""

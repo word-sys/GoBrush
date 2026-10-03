@@ -831,6 +831,8 @@ class SelectTool(BaseTool):
         try:
             mgr.set_current_color(item.stroke_color)
             mgr.set_stroke_width(item.stroke_width)
+            if hasattr(item, "radius") and hasattr(mgr, "set_corner_radius"):
+                mgr.set_corner_radius(item.radius)
             if item.fill_color is None:
                 mgr.set_fill_mode("outline")
             elif item.fill_color[3] >= 0.99:
@@ -859,19 +861,23 @@ class SelectTool(BaseTool):
             )
             self.canvas.execute_command(cmd)
 
-    def _on_manager_style_changed(self, width: float, fill_mode: str, opacity: float = 0.25) -> None:
+    def _on_manager_style_changed(
+        self, width: float, fill_mode: str, opacity: float = 0.25, *args: Any
+    ) -> None:
         if self._is_syncing_style or not self.canvas or not self.canvas.document:
             return
         selected = self.canvas.document.selected_items
         if selected and self.is_active:
             mgr = self.canvas.tool_manager
             effective_fill = mgr.get_effective_fill_color() if mgr else None
+            radius = getattr(mgr, "corner_radius", None)
 
             cmd = RestyleCommand(
                 selected,
                 stroke_width=width,
                 fill_color=effective_fill,
                 clear_fill=(fill_mode == "outline"),
+                radius=radius,
                 document=self.canvas.document,
             )
             self.canvas.execute_command(cmd)

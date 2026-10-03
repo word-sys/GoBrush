@@ -21,6 +21,7 @@ from gobrush.ui.property_bar import (
     SIZE_OPTIONS,
     FILL_OPTIONS,
     OPACITY_OPTIONS,
+    RADIUS_OPTIONS,
 )
 from gobrush.ui.palette import ToolPalette
 from gobrush.ui.canvas import Canvas
@@ -44,6 +45,12 @@ class TestContextPropertyBar(unittest.TestCase):
         self.assertEqual(len(OPACITY_OPTIONS), 4)
         opacity_values = [opt["value"] for opt in OPACITY_OPTIONS]
         self.assertEqual(opacity_values, [0.15, 0.25, 0.50, 0.75])
+
+        self.assertEqual(len(RADIUS_OPTIONS), 3)
+        radius_labels = [opt["label"] for opt in RADIUS_OPTIONS]
+        self.assertEqual(radius_labels, ["Sharp", "Round", "Pill"])
+        radius_values = [opt["value"] for opt in RADIUS_OPTIONS]
+        self.assertEqual(radius_values, [0.0, 8.0, 16.0])
 
     def test_property_bar_defaults(self) -> None:
         bar = ContextPropertyBar()
@@ -320,6 +327,45 @@ class TestContextPropertyBar(unittest.TestCase):
         win.palette.set_fill_opacity(0.5)
         self.assertAlmostEqual(win.canvas.tool_manager.fill_opacity, 0.5, places=2)
         self.assertAlmostEqual(win.property_bar.fill_opacity, 0.5, places=2)
+
+    def test_corner_radius_integration(self) -> None:
+        mgr = ToolManager()
+        bar = ContextPropertyBar(mgr)
+
+        # By default not visible when no tool active
+        self.assertFalse(bar.box_radius.get_visible())
+
+        # Switch to rectangle tool -> box_radius becomes visible & sensitive
+        bar.update_for_tool("rectangle")
+        self.assertTrue(bar.box_radius.get_visible())
+        self.assertTrue(bar.box_radius.get_sensitive())
+
+        # Default corner radius is 0 (Sharp)
+        self.assertEqual(bar.corner_radius, 0.0)
+        self.assertEqual(bar.badge_radius.get_text(), "Sharp")
+        btn_sharp = bar.get_radius_button("sharp")
+        self.assertIsNotNone(btn_sharp)
+        self.assertTrue(btn_sharp.has_css_class("is-active-radius"))
+
+        # Click Round (8px)
+        btn_round = bar.get_radius_button("round")
+        self.assertIsNotNone(btn_round)
+        btn_round.emit("clicked")
+        self.assertEqual(mgr.corner_radius, 8.0)
+        self.assertEqual(bar.corner_radius, 8.0)
+        self.assertEqual(bar.badge_radius.get_text(), "Round")
+
+        # Click Pill (16px)
+        btn_pill = bar.get_radius_button("pill")
+        self.assertIsNotNone(btn_pill)
+        btn_pill.emit("clicked")
+        self.assertEqual(mgr.corner_radius, 16.0)
+        self.assertEqual(bar.corner_radius, 16.0)
+        self.assertEqual(bar.badge_radius.get_text(), "Pill")
+
+        # Switch to Pen tool -> box_radius becomes hidden
+        bar.update_for_tool("pen")
+        self.assertFalse(bar.box_radius.get_visible())
 
 
 if __name__ == "__main__":

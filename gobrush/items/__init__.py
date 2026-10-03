@@ -30,6 +30,11 @@ from gobrush.items.arrow import (
     ArrowItem,
     compute_arrowhead,
 )
+from gobrush.items.rectangle import (
+    RectangleItem,
+    draw_rounded_rectangle,
+    point_in_rounded_rectangle,
+)
 
 __all__ = [
     "AnnotationItem",
@@ -37,9 +42,12 @@ __all__ = [
     "HighlighterItem",
     "LineItem",
     "ArrowItem",
+    "RectangleItem",
     "compute_arrowhead",
     "snap_angle",
     "build_smooth_path",
+    "draw_rounded_rectangle",
+    "point_in_rounded_rectangle",
     "HANDLE_TOP_LEFT",
     "HANDLE_TOP_CENTER",
     "HANDLE_TOP_RIGHT",

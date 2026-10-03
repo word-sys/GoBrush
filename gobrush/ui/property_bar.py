@@ -39,6 +39,12 @@ OPACITY_OPTIONS = [
     {"label": "75%", "value": 0.75},
 ]
 
+RADIUS_OPTIONS = [
+    {"label": "Sharp", "value": 0.0},
+    {"label": "Round", "value": 8.0},
+    {"label": "Pill", "value": 16.0},
+]
+
 _CSS_INITIALIZED = False
 
 
@@ -116,6 +122,18 @@ def ensure_property_bar_css() -> None:
             background-color: @theme_selected_bg_color;
             color: @theme_selected_fg_color;
         }
+        .radius-button {
+            padding: 2px 3px;
+            border-radius: 4px;
+            min-height: 22px;
+            font-size: 10px;
+            font-weight: 600;
+            transition: all 120ms ease;
+        }
+        .radius-button:checked, .radius-button.is-active-radius {
+            background-color: @theme_selected_bg_color;
+            color: @theme_selected_fg_color;
+        }
     """)
     Gtk.StyleContext.add_provider_for_display(
         display, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
@@ -137,6 +155,7 @@ class ContextPropertyBar(Gtk.Box):
         self._local_stroke_width: float = DEFAULT_STROKE_WIDTH
         self._local_fill_mode: str = DEFAULT_FILL_MODE
         self._local_fill_opacity: float = DEFAULT_FILL_OPACITY
+        self._local_corner_radius: float = 0.0
 
         self._tool_changed_handler: Callable[[BaseTool | None], None] | None = None
         self._style_changed_handler: Callable[..., None] | None = None
@@ -144,9 +163,11 @@ class ContextPropertyBar(Gtk.Box):
         self._size_buttons: dict[str, Gtk.ToggleButton] = {}
         self._fill_buttons: dict[str, Gtk.ToggleButton] = {}
         self._opacity_buttons: dict[str, Gtk.ToggleButton] = {}
+        self._radius_buttons: dict[str, Gtk.ToggleButton] = {}
         self._first_size_btn: Gtk.ToggleButton | None = None
         self._first_fill_btn: Gtk.ToggleButton | None = None
         self._first_opacity_btn: Gtk.ToggleButton | None = None
+        self._first_radius_btn: Gtk.ToggleButton | None = None
 
         self._build_ui()
 
@@ -155,6 +176,7 @@ class ContextPropertyBar(Gtk.Box):
         else:
             self._sync_size_buttons(self._local_stroke_width)
             self._sync_fill_buttons(self._local_fill_mode)
+            self._sync_radius_buttons(self._local_corner_radius)
 
     @property
     def tool_manager(self) -> ToolManager | None:
@@ -212,6 +234,23 @@ class ContextPropertyBar(Gtk.Box):
             self._sync_fill_buttons(self._local_fill_mode)
             self._notify_style_changed()
 
+    @property
+    def corner_radius(self) -> float:
+        if self._tool_manager is not None:
+            return getattr(self._tool_manager, "corner_radius", 0.0)
+        return self._local_corner_radius
+
+    def set_corner_radius(self, radius: float) -> None:
+        clamped = max(0.0, float(radius))
+        if self._tool_manager is not None and hasattr(self._tool_manager, "set_corner_radius"):
+            self._tool_manager.set_corner_radius(clamped)
+        else:
+            if abs(self._local_corner_radius - clamped) < 1e-4:
+                return
+            self._local_corner_radius = clamped
+            self._sync_radius_buttons(clamped)
+            self._notify_style_changed()
+
     def get_size_button(self, key: str | float) -> Gtk.ToggleButton | None:
         if isinstance(key, (int, float)):
             k1 = f"{int(round(key))}px"
@@ -226,6 +265,13 @@ class ContextPropertyBar(Gtk.Box):
 
     def get_fill_button(self, key: str) -> Gtk.ToggleButton | None:
         return self._fill_buttons.get(str(key).lower().strip())
+
+    def get_radius_button(self, key: str | float) -> Gtk.ToggleButton | None:
+        if isinstance(key, (int, float)):
+            k1 = f"{int(round(key))}px"
+            k2 = str(int(round(key)))
+            return self._radius_buttons.get(k1) or self._radius_buttons.get(k2)
+        return self._radius_buttons.get(str(key).lower().strip())
 
     def get_opacity_button(self, key: str | float) -> Gtk.ToggleButton | None:
         if isinstance(key, (int, float)):
@@ -258,9 +304,12 @@ class ContextPropertyBar(Gtk.Box):
     def _notify_style_changed(self) -> None:
         for cb in list(self._style_changed_callbacks):
             try:
-                cb(self.stroke_width, self.fill_mode, self.fill_opacity)
+                cb(self.stroke_width, self.fill_mode, self.fill_opacity, self.corner_radius)
             except TypeError:
-                cb(self.stroke_width, self.fill_mode)
+                try:
+                    cb(self.stroke_width, self.fill_mode, self.fill_opacity)
+                except TypeError:
+                    cb(self.stroke_width, self.fill_mode)
 
     def set_tool_manager(self, tool_manager: ToolManager | None) -> None:
         if self._tool_manager is not None:
@@ -282,21 +331,41 @@ class ContextPropertyBar(Gtk.Box):
 
             self._sync_size_buttons(self._tool_manager.stroke_width)
             self._sync_fill_buttons(self._tool_manager.fill_mode)
+            if hasattr(self._tool_manager, "corner_radius"):
+                self._sync_radius_buttons(self._tool_manager.corner_radius)
             self.update_for_tool(self._tool_manager.active_tool_id)
 
     def update_for_tool(self, tool_id: str | None) -> None:
         if tool_id in ("crop", "blur"):
             self.box_size.set_sensitive(False)
             self.box_fill.set_sensitive(False)
+            if hasattr(self, "box_radius"):
+                self.box_radius.set_visible(False)
+                self.box_radius.set_sensitive(False)
         elif tool_id in ("pen", "highlighter", "line", "arrow"):
             self.box_size.set_sensitive(True)
             self.box_fill.set_sensitive(False)
+            if hasattr(self, "box_radius"):
+                self.box_radius.set_visible(False)
+                self.box_radius.set_sensitive(False)
+        elif tool_id == "rectangle":
+            self.box_size.set_sensitive(True)
+            self.box_fill.set_sensitive(True)
+            is_semi = (self.fill_mode == "semi")
+            self.box_opacity.set_sensitive(is_semi)
+            self.box_opacity.set_visible(is_semi)
+            if hasattr(self, "box_radius"):
+                self.box_radius.set_visible(True)
+                self.box_radius.set_sensitive(True)
         else:
             self.box_size.set_sensitive(True)
             self.box_fill.set_sensitive(True)
             is_semi = (self.fill_mode == "semi")
             self.box_opacity.set_sensitive(is_semi)
             self.box_opacity.set_visible(is_semi)
+            if hasattr(self, "box_radius"):
+                self.box_radius.set_visible(False)
+                self.box_radius.set_sensitive(False)
 
     def _build_ui(self) -> None:
         # Size Section (Compact 2-row layout)
@@ -418,6 +487,43 @@ class ContextPropertyBar(Gtk.Box):
         self.box_fill.append(self.box_opacity)
 
         self.append(self.box_fill)
+
+        # Section 3: Corner Radius (for Rectangle Tool)
+        self.box_radius = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+
+        radius_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self.label_radius = Gtk.Label(label="Corners", xalign=0.0, hexpand=True)
+        self.label_radius.add_css_class("property-title")
+        radius_header.append(self.label_radius)
+
+        self.badge_radius = Gtk.Label(label="Sharp", halign=Gtk.Align.END)
+        self.badge_radius.add_css_class("property-value-badge")
+        radius_header.append(self.badge_radius)
+        self.box_radius.append(radius_header)
+
+        self.radius_btn_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=2, homogeneous=True
+        )
+        for opt in RADIUS_OPTIONS:
+            lbl = opt["label"]
+            val = opt["value"]
+            btn = Gtk.ToggleButton(label=lbl)
+            btn.add_css_class("radius-button")
+            btn.set_tooltip_text(f"Corners: {lbl} ({int(val)}px)")
+            if self._first_radius_btn is None:
+                self._first_radius_btn = btn
+            else:
+                btn.set_group(self._first_radius_btn)
+            btn.connect("clicked", self._on_radius_button_clicked, val, lbl.lower())
+            self._radius_buttons[lbl.lower()] = btn
+            self._radius_buttons[f"{int(val)}px"] = btn
+            self._radius_buttons[str(int(val))] = btn
+            self.radius_btn_row.append(btn)
+        self.box_radius.append(self.radius_btn_row)
+
+        self.box_radius.set_visible(False)
+        self.box_radius.set_sensitive(False)
+        self.append(self.box_radius)
 
     def _sync_size_buttons(self, width: float) -> None:
         self._updating_ui = True
@@ -541,11 +647,54 @@ class ContextPropertyBar(Gtk.Box):
             self.set_fill_mode("semi")
         self.set_fill_opacity(value)
 
+    def _on_radius_button_clicked(
+        self, button: Gtk.ToggleButton, value: float, key: str
+    ) -> None:
+        if self._updating_ui:
+            return
+        if not button.get_active():
+            button.set_active(True)
+            return
+        self.set_corner_radius(value)
+
+    def _sync_radius_buttons(self, radius: float) -> None:
+        self._updating_ui = True
+        try:
+            r_int = int(round(radius))
+            target_btn = None
+            if r_int == 0:
+                target_btn = self._radius_buttons.get("sharp")
+            elif r_int <= 10:
+                target_btn = self._radius_buttons.get("round")
+            else:
+                target_btn = self._radius_buttons.get("pill")
+
+            for btn in set(self._radius_buttons.values()):
+                if btn is target_btn:
+                    btn.add_css_class("is-active-radius")
+                    if not btn.get_active():
+                        btn.set_active(True)
+                else:
+                    btn.remove_css_class("is-active-radius")
+
+            if hasattr(self, "badge_radius"):
+                if r_int == 0:
+                    self.badge_radius.set_text("Sharp")
+                elif r_int == 8:
+                    self.badge_radius.set_text("Round")
+                elif r_int == 16:
+                    self.badge_radius.set_text("Pill")
+                else:
+                    self.badge_radius.set_text(f"{r_int} px")
+        finally:
+            self._updating_ui = False
+
     def _on_tool_manager_style_changed(
-        self, width: float, fill: str, opacity: float = 0.25
+        self, width: float, fill: str, opacity: float = 0.25, radius: float = 0.0
     ) -> None:
         self._sync_size_buttons(width)
         self._sync_fill_buttons(fill)
+        self._sync_radius_buttons(radius)
         self._notify_style_changed()
 
     def _on_tool_manager_tool_changed(self, tool: BaseTool | None) -> None:

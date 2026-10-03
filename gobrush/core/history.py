@@ -272,6 +272,7 @@ class RestyleCommand(Command):
         stroke_width: float | None = None,
         fill_color: tuple[float, float, float, float] | None = None,
         clear_fill: bool = False,
+        radius: float | None = None,
         document: AnnotationDocument | None = None,
         name: str = "Change Style",
     ) -> None:
@@ -280,31 +281,38 @@ class RestyleCommand(Command):
         self.stroke_width = stroke_width
         self.fill_color = fill_color
         self.clear_fill = clear_fill
+        self.radius = radius
         self.document = document
         self.name = name
         self._previous_styles: list[
-            tuple[AnnotationItem, tuple[float, float, float, float], float, tuple[float, float, float, float] | None]
+            tuple[AnnotationItem, tuple[float, float, float, float], float, tuple[float, float, float, float] | None, float | None]
         ] = [
-            (it, it.stroke_color, it.stroke_width, it.fill_color)
+            (it, it.stroke_color, it.stroke_width, it.fill_color, getattr(it, "radius", None))
             for it in self.items
         ]
 
     def execute(self) -> None:
         for it in self.items:
+            kwargs: dict[str, Any] = {}
+            if self.radius is not None and hasattr(it, "radius"):
+                kwargs["radius"] = self.radius
             it.apply_style(
                 stroke_color=self.stroke_color,
                 stroke_width=self.stroke_width,
                 fill_color=self.fill_color,
                 clear_fill=self.clear_fill,
+                **kwargs,
             )
         if self.document is not None:
             self.document.mark_dirty()
 
     def undo(self) -> None:
-        for it, stroke_color, stroke_width, fill_color in self._previous_styles:
+        for it, stroke_color, stroke_width, fill_color, radius in self._previous_styles:
             it.stroke_color = stroke_color
             it.stroke_width = stroke_width
             it.fill_color = fill_color
+            if radius is not None and hasattr(it, "radius"):
+                it.radius = radius
         if self.document is not None:
             self.document.mark_dirty()
 

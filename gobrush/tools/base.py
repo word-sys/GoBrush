@@ -67,6 +67,7 @@ from gobrush.tools.pen import PenTool
 from gobrush.tools.highlighter import HighlighterTool
 from gobrush.tools.line import LineTool
 from gobrush.tools.arrow import ArrowTool
+from gobrush.tools.rectangle import RectangleTool
 
 
 class TextTool(BaseTool):
@@ -75,14 +76,6 @@ class TextTool(BaseTool):
     shortcut: str = "T"
     icon_name: str = "insert-text-symbolic"
     cursor_name: str | None = "text"
-
-
-class RectangleTool(BaseTool):
-    tool_id: str = "rectangle"
-    name: str = "Rectangle"
-    shortcut: str = "R"
-    icon_name: str = "window-maximize-symbolic"
-    cursor_name: str | None = "crosshair"
 
 
 class EllipseTool(BaseTool):
@@ -198,6 +191,7 @@ class ToolManager:
         self._stroke_width: float = DEFAULT_STROKE_WIDTH
         self._fill_mode: str = DEFAULT_FILL_MODE
         self._fill_opacity: float = DEFAULT_FILL_OPACITY
+        self._corner_radius: float = 0.0
         self._is_dragging: bool = False
 
     def register_default_tools(self) -> None:
@@ -338,6 +332,17 @@ class ToolManager:
         self._fill_opacity = clamped
         self._notify_style_changed()
 
+    @property
+    def corner_radius(self) -> float:
+        return self._corner_radius
+
+    def set_corner_radius(self, radius: float) -> None:
+        clamped = max(0.0, float(radius))
+        if abs(self._corner_radius - clamped) < 1e-4:
+            return
+        self._corner_radius = clamped
+        self._notify_style_changed()
+
     def get_effective_fill_color(self) -> tuple[float, float, float, float] | None:
         if self._fill_mode == "outline":
             return None
@@ -363,9 +368,12 @@ class ToolManager:
     def _notify_style_changed(self) -> None:
         for cb in list(self._style_changed_callbacks):
             try:
-                cb(self._stroke_width, self._fill_mode, self._fill_opacity)
+                cb(self._stroke_width, self._fill_mode, self._fill_opacity, self._corner_radius)
             except TypeError:
-                cb(self._stroke_width, self._fill_mode)
+                try:
+                    cb(self._stroke_width, self._fill_mode, self._fill_opacity)
+                except TypeError:
+                    cb(self._stroke_width, self._fill_mode)
 
     def handle_press(
         self, ix: float, iy: float, sx: float, sy: float, state: Gdk.ModifierType
