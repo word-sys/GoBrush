@@ -8,7 +8,12 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gtk, Gdk
 
 from gobrush.compat.color import pick_color_dialog, rgba_from_floats
-from gobrush.ui.property_bar import ContextPropertyBar, SIZE_OPTIONS, FILL_OPTIONS
+from gobrush.ui.property_bar import (
+    ContextPropertyBar,
+    SIZE_OPTIONS,
+    FILL_OPTIONS,
+    OPACITY_OPTIONS,
+)
 
 if TYPE_CHECKING:
     from gobrush.tools.base import BaseTool, ToolManager
@@ -142,17 +147,21 @@ def ensure_palette_css() -> None:
     css_provider = Gtk.CssProvider()
     css_provider.load_from_data(b"""
         .tool-palette {
-            padding: 6px 8px;
+            padding: 4px 6px;
         }
         .tool-palette-header {
+            font-size: 11px;
             font-weight: 700;
-            margin-bottom: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            color: alpha(@theme_fg_color, 0.7);
+            margin-bottom: 1px;
         }
         .tool-button {
-            padding: 4px 6px;
-            border-radius: 6px;
-            min-height: 28px;
-            font-size: 13px;
+            padding: 2px 4px;
+            border-radius: 5px;
+            min-height: 24px;
+            font-size: 11px;
             transition: all 120ms ease;
         }
         .tool-button:checked, .tool-button.is-active-tool {
@@ -161,12 +170,12 @@ def ensure_palette_css() -> None:
             font-weight: 600;
         }
         .palette-separator {
-            margin: 3px 0;
-            opacity: 0.4;
+            margin: 2px 0;
+            opacity: 0.25;
         }
         .color-dot {
-            min-width: 22px;
-            min-height: 22px;
+            min-width: 18px;
+            min-height: 18px;
             padding: 0;
             border-radius: 9999px;
             border: 2px solid transparent;
@@ -189,9 +198,10 @@ def ensure_palette_css() -> None:
             box-shadow: 0 0 0 2px @theme_selected_bg_color;
         }
         .color-picker-button {
-            padding: 4px 8px;
-            border-radius: 6px;
-            min-height: 28px;
+            padding: 2px 6px;
+            border-radius: 5px;
+            min-height: 24px;
+            font-size: 11px;
             transition: all 120ms ease;
         }
         .color-picker-button.is-active-color {
@@ -207,11 +217,12 @@ def ensure_palette_css() -> None:
 
 class ToolPalette(Gtk.Box):
     def __init__(self, tool_manager: ToolManager | None = None) -> None:
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         ensure_palette_css()
 
         self.add_css_class("tool-palette")
-        self.set_size_request(260, -1)
+        self.set_hexpand(False)
+        self.set_size_request(230, -1)
 
         self._tool_manager: ToolManager | None = None
         self._buttons: dict[str, Gtk.ToggleButton] = {}
@@ -278,6 +289,13 @@ class ToolPalette(Gtk.Box):
     def set_fill_mode(self, mode: str) -> None:
         self.property_bar.set_fill_mode(mode)
 
+    @property
+    def fill_opacity(self) -> float:
+        return self.property_bar.fill_opacity
+
+    def set_fill_opacity(self, opacity: float) -> None:
+        self.property_bar.set_fill_opacity(opacity)
+
     def get_button(self, tool_id: str) -> Gtk.ToggleButton | None:
         return self._buttons.get(tool_id)
 
@@ -289,6 +307,9 @@ class ToolPalette(Gtk.Box):
 
     def get_fill_button(self, key: str) -> Gtk.ToggleButton | None:
         return self.property_bar.get_fill_button(key)
+
+    def get_opacity_button(self, key: str | float) -> Gtk.ToggleButton | None:
+        return self.property_bar.get_opacity_button(key)
 
     def add_color_changed_callback(
         self, cb: Callable[[tuple[float, float, float, float]], None]
@@ -382,7 +403,7 @@ class ToolPalette(Gtk.Box):
         self.append(self.label_tools)
 
     def _build_grid(self) -> None:
-        self.grid = Gtk.Grid(row_spacing=6, column_spacing=6, column_homogeneous=True)
+        self.grid = Gtk.Grid(row_spacing=3, column_spacing=3, column_homogeneous=True)
         self.append(self.grid)
 
         for i, tool in enumerate(TOOL_DEFINITIONS):

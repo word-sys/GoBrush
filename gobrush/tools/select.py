@@ -833,10 +833,11 @@ class SelectTool(BaseTool):
             mgr.set_stroke_width(item.stroke_width)
             if item.fill_color is None:
                 mgr.set_fill_mode("outline")
-            elif item.fill_color[3] < 0.9:
-                mgr.set_fill_mode("semi")
-            else:
+            elif item.fill_color[3] >= 0.99:
                 mgr.set_fill_mode("solid")
+            else:
+                mgr.set_fill_mode("semi")
+                mgr.set_fill_opacity(item.fill_color[3])
         finally:
             self._is_syncing_style = False
 
@@ -847,11 +848,7 @@ class SelectTool(BaseTool):
         if selected and self.is_active:
             mgr = self.canvas.tool_manager
             fill_mode = mgr.fill_mode if mgr else "outline"
-            effective_fill = None
-            if fill_mode == "semi":
-                effective_fill = (color[0], color[1], color[2], 0.25)
-            elif fill_mode == "solid":
-                effective_fill = (color[0], color[1], color[2], 1.0)
+            effective_fill = mgr.get_effective_fill_color() if mgr else None
 
             cmd = RestyleCommand(
                 selected,
@@ -862,18 +859,13 @@ class SelectTool(BaseTool):
             )
             self.canvas.execute_command(cmd)
 
-    def _on_manager_style_changed(self, width: float, fill_mode: str) -> None:
+    def _on_manager_style_changed(self, width: float, fill_mode: str, opacity: float = 0.25) -> None:
         if self._is_syncing_style or not self.canvas or not self.canvas.document:
             return
         selected = self.canvas.document.selected_items
         if selected and self.is_active:
             mgr = self.canvas.tool_manager
-            curr_color = mgr.current_color if mgr else (0.88, 0.11, 0.14, 1.0)
-            effective_fill = None
-            if fill_mode == "semi":
-                effective_fill = (curr_color[0], curr_color[1], curr_color[2], 0.25)
-            elif fill_mode == "solid":
-                effective_fill = (curr_color[0], curr_color[1], curr_color[2], 1.0)
+            effective_fill = mgr.get_effective_fill_color() if mgr else None
 
             cmd = RestyleCommand(
                 selected,

@@ -17,8 +17,11 @@ class CanvasView(Gtk.Box):
 
         self.canvas = canvas or Canvas()
         self.palette = ToolPalette(self.canvas.tool_manager)
+        self.palette.set_hexpand(False)
         self.palette_scroll = Gtk.ScrolledWindow()
         self.palette_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.palette_scroll.set_hexpand(False)
+        self.palette_scroll.set_propagate_natural_width(True)
         self.palette_scroll.set_child(self.palette)
         self.append(self.palette_scroll)
 
