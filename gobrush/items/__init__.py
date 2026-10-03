@@ -26,12 +26,18 @@ from gobrush.items.line import (
     LineItem,
     snap_angle,
 )
+from gobrush.items.arrow import (
+    ArrowItem,
+    compute_arrowhead,
+)
 
 __all__ = [
     "AnnotationItem",
     "PenItem",
     "HighlighterItem",
     "LineItem",
+    "ArrowItem",
+    "compute_arrowhead",
     "snap_angle",
     "build_smooth_path",
     "HANDLE_TOP_LEFT",
