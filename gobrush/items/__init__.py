@@ -35,6 +35,11 @@ from gobrush.items.rectangle import (
     draw_rounded_rectangle,
     point_in_rounded_rectangle,
 )
+from gobrush.items.ellipse import (
+    EllipseItem,
+    draw_ellipse,
+    point_in_ellipse,
+)
 
 __all__ = [
     "AnnotationItem",
@@ -43,11 +48,14 @@ __all__ = [
     "LineItem",
     "ArrowItem",
     "RectangleItem",
+    "EllipseItem",
     "compute_arrowhead",
     "snap_angle",
     "build_smooth_path",
     "draw_rounded_rectangle",
     "point_in_rounded_rectangle",
+    "draw_ellipse",
+    "point_in_ellipse",
     "HANDLE_TOP_LEFT",
     "HANDLE_TOP_CENTER",
     "HANDLE_TOP_RIGHT",

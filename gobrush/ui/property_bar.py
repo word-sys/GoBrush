@@ -357,6 +357,15 @@ class ContextPropertyBar(Gtk.Box):
             if hasattr(self, "box_radius"):
                 self.box_radius.set_visible(True)
                 self.box_radius.set_sensitive(True)
+        elif tool_id == "ellipse":
+            self.box_size.set_sensitive(True)
+            self.box_fill.set_sensitive(True)
+            is_semi = (self.fill_mode == "semi")
+            self.box_opacity.set_sensitive(is_semi)
+            self.box_opacity.set_visible(is_semi)
+            if hasattr(self, "box_radius"):
+                self.box_radius.set_visible(False)
+                self.box_radius.set_sensitive(False)
         else:
             self.box_size.set_sensitive(True)
             self.box_fill.set_sensitive(True)

@@ -68,6 +68,7 @@ from gobrush.tools.highlighter import HighlighterTool
 from gobrush.tools.line import LineTool
 from gobrush.tools.arrow import ArrowTool
 from gobrush.tools.rectangle import RectangleTool
+from gobrush.tools.ellipse import EllipseTool
 
 
 class TextTool(BaseTool):
@@ -76,14 +77,6 @@ class TextTool(BaseTool):
     shortcut: str = "T"
     icon_name: str = "insert-text-symbolic"
     cursor_name: str | None = "text"
-
-
-class EllipseTool(BaseTool):
-    tool_id: str = "ellipse"
-    name: str = "Ellipse"
-    shortcut: str = "C"
-    icon_name: str = "radio-checked-symbolic"
-    cursor_name: str | None = "crosshair"
 
 
 class BlurTool(BaseTool):
