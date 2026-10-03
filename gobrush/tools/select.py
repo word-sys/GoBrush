@@ -20,6 +20,7 @@ from gobrush.items.base import (
     HANDLE_START,
     HANDLE_END,
 )
+from gobrush.items.line import snap_angle
 from gobrush.core.history import (
     DeleteAnnotationCommand,
     RestyleCommand,
@@ -792,6 +793,26 @@ class SelectTool(BaseTool):
 
         elif handle == HANDLE_MIDDLE_RIGHT:
             new_w = max(min_size, w0 + dx)
+
+        elif handle == HANDLE_START:
+            new_x1 = x0 + dx
+            new_y1 = y0 + dy
+            if lock_aspect:
+                new_x1, new_y1 = snap_angle(w0, h0, new_x1, new_y1)
+            item.set_geometry((new_x1, new_y1, w0, h0))
+            if self.canvas and self.canvas.document:
+                self.canvas.document.mark_dirty()
+            return
+
+        elif handle == HANDLE_END:
+            new_x2 = w0 + dx
+            new_y2 = h0 + dy
+            if lock_aspect:
+                new_x2, new_y2 = snap_angle(x0, y0, new_x2, new_y2)
+            item.set_geometry((x0, y0, new_x2, new_y2))
+            if self.canvas and self.canvas.document:
+                self.canvas.document.mark_dirty()
+            return
 
         item.set_geometry((new_x, new_y, new_w, new_h))
         if self.canvas and self.canvas.document:

@@ -65,6 +65,7 @@ class BaseTool(ABC):
 from gobrush.tools.select import SelectTool
 from gobrush.tools.pen import PenTool
 from gobrush.tools.highlighter import HighlighterTool
+from gobrush.tools.line import LineTool
 
 
 class TextTool(BaseTool):
@@ -80,14 +81,6 @@ class ArrowTool(BaseTool):
     name: str = "Arrow"
     shortcut: str = "A"
     icon_name: str = "go-next-symbolic"
-    cursor_name: str | None = "crosshair"
-
-
-class LineTool(BaseTool):
-    tool_id: str = "line"
-    name: str = "Line"
-    shortcut: str = "L"
-    icon_name: str = "view-list-symbolic"
     cursor_name: str | None = "crosshair"
 
 
